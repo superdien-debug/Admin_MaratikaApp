@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
 import { newsAdminService, type NewsArticle } from './services/newsAdminService';
 import { notificationAdminService, type AppNotification } from './services/notificationAdminService';
-import { Plus, Trash2, Edit3, Save, X, Newspaper, LogOut, Lock, Bell, Calendar, Settings, Sliders, Users, LayoutDashboard, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { microLearningAdminService, type MicroLearningPost } from './services/microLearningAdminService';
+import { Plus, Trash2, Edit3, Save, X, Newspaper, LogOut, Lock, Bell, Calendar, Settings, Sliders, Users, LayoutDashboard, ShieldCheck, ShieldAlert, BookOpen } from 'lucide-react';
 import { format } from 'date-fns';
 
-type Tab = 'news' | 'notifications' | 'settings' | 'users' | 'dashboard' | 'moderation';
+type Tab = 'news' | 'notifications' | 'settings' | 'users' | 'dashboard' | 'moderation' | 'micro_learning';
 
 type AppConfig = {
   key: string;
@@ -35,6 +36,12 @@ function App() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<Partial<NewsArticle>>({ title: '', content: '', excerpt: '', image_url: '' });
+
+  // Micro Learning state
+  const [mlPosts, setMLPosts] = useState<MicroLearningPost[]>([]);
+  const [editingMLId, setEditingMLId] = useState<string | null>(null);
+  const [showMLForm, setShowMLForm] = useState(false);
+  const [mlForm, setMLForm] = useState<Partial<MicroLearningPost>>({ title: '', content: '', summary: '', image_url: '', category: 'General', is_published: true });
 
   // Notifications state
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -99,6 +106,7 @@ function App() {
   const loadAll = async () => {
     loadNews();
     loadNotifications();
+    loadMLPosts();
     loadConfigs();
     loadUsers();
     loadModeration();
@@ -107,6 +115,10 @@ function App() {
 
   const loadNews = async () => {
     try { const data = await newsAdminService.getAll(); setNews(data); } catch (err) { console.error(err); }
+  };
+
+  const loadMLPosts = async () => {
+    try { const data = await microLearningAdminService.getAll(); setMLPosts(data); } catch (err) { console.error(err); }
   };
 
   const loadNotifications = async () => {
@@ -187,6 +199,27 @@ function App() {
 
   const startEditNews = (article: NewsArticle) => {
     setEditingId(article.id); setForm(article); setShowForm(true);
+  };
+
+  // Micro Learning handlers
+  const handleSaveML = async () => {
+    try {
+      const postData = { ...mlForm, author_id: session.user.id };
+      if (editingMLId) await microLearningAdminService.update(editingMLId, postData);
+      else await microLearningAdminService.create(postData);
+      setShowMLForm(false); setEditingMLId(null);
+      setMLForm({ title: '', content: '', summary: '', image_url: '', category: 'General', is_published: true });
+      loadMLPosts();
+    } catch { alert('Failed to save micro-learning post'); }
+  };
+
+  const handleDeleteML = async (id: string) => {
+    if (!confirm('Delete this post?')) return;
+    try { await microLearningAdminService.delete(id); loadMLPosts(); } catch { alert('Failed to delete'); }
+  };
+
+  const startEditML = (post: MicroLearningPost) => {
+    setEditingMLId(post.id); setMLForm(post); setShowMLForm(true);
   };
 
   // Notification handlers
@@ -295,6 +328,7 @@ function App() {
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
     { id: 'users', label: 'Users', icon: <Users size={18} /> },
     { id: 'news', label: 'News', icon: <Newspaper size={18} /> },
+    { id: 'micro_learning', label: 'Micro Learning', icon: <BookOpen size={18} /> },
     { id: 'notifications', label: 'Notifications', icon: <Bell size={18} /> },
     { id: 'moderation', label: 'Moderation', icon: <ShieldCheck size={18} /> },
     { id: 'settings', label: 'Settings', icon: <Settings size={18} /> },
@@ -329,8 +363,8 @@ function App() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-3.5 text-sm font-bold border-b-2 transition-all ${activeTab === tab.id
-                  ? 'border-maroon-800 text-maroon-800'
-                  : 'border-transparent text-slate-400 hover:text-slate-700 hover:border-slate-300'
+                ? 'border-maroon-800 text-maroon-800'
+                : 'border-transparent text-slate-400 hover:text-slate-700 hover:border-slate-300'
                 }`}
             >
               {tab.icon} {tab.label}
@@ -359,6 +393,14 @@ function App() {
               className="bg-maroon-800 text-white px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-maroon-900 transition-colors shadow-sm shadow-maroon-800/20"
             >
               <Plus size={16} /> New Notification
+            </button>
+          )}
+          {activeTab === 'micro_learning' && (
+            <button
+              onClick={() => { setEditingMLId(null); setMLForm({ title: '', content: '', summary: '', image_url: '', category: 'General', is_published: true }); setShowMLForm(true); }}
+              className="bg-maroon-800 text-white px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-maroon-900 transition-colors shadow-sm shadow-maroon-800/20"
+            >
+              <Plus size={16} /> New Lesson
             </button>
           )}
         </div>
@@ -422,8 +464,8 @@ function App() {
                     </td>
                     <td className="px-6 py-4">
                       <span className={`text-xs font-black px-2.5 py-1 rounded-full uppercase tracking-wide ${user.role === 'admin' ? 'bg-maroon-100 text-maroon-800' :
-                          user.role === 'teacher' ? 'bg-purple-100 text-purple-700' :
-                            'bg-slate-100 text-slate-500'
+                        user.role === 'teacher' ? 'bg-purple-100 text-purple-700' :
+                          'bg-slate-100 text-slate-500'
                         }`}>{user.role || 'student'}</span>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-500">{format(new Date(user.created_at), 'MMM d, yyyy')}</td>
@@ -489,6 +531,69 @@ function App() {
                       </div>
                     </div>
                     <p className="text-slate-500 text-sm mt-3 line-clamp-2">{article.excerpt || 'No summary provided.'}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* ── Micro Learning ── */}
+        {activeTab === 'micro_learning' && (
+          <>
+            {showMLForm && (
+              <section className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-8">
+                <h2 className="text-xl font-bold mb-6 text-slate-800">{editingMLId ? 'Edit Lesson' : 'Create Micro Learning Lesson'}</h2>
+                <div className="grid gap-5">
+                  <div className="grid grid-cols-2 gap-5">
+                    <input type="text" placeholder="Lesson Title" className="w-full p-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-maroon-800/20" value={mlForm.title} onChange={e => setMLForm({ ...mlForm, title: e.target.value })} />
+                    <input type="text" placeholder="Category (e.g., Mind, Wisdom)" className="w-full p-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-maroon-800/20" value={mlForm.category} onChange={e => setMLForm({ ...mlForm, category: e.target.value })} />
+                  </div>
+                  <input type="text" placeholder="Image URL" className="w-full p-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-maroon-800/20" value={mlForm.image_url} onChange={e => setMLForm({ ...mlForm, image_url: e.target.value })} />
+                  <textarea placeholder="Teaser Summary (appears on cards)" className="w-full p-3 rounded-lg border border-slate-200 h-20 focus:outline-none focus:ring-2 focus:ring-maroon-800/20" value={mlForm.summary} onChange={e => setMLForm({ ...mlForm, summary: e.target.value })} />
+                  <textarea placeholder="Main content (Markdown/HTML supported)" className="w-full p-3 rounded-lg border border-slate-200 h-64 focus:outline-none focus:ring-2 focus:ring-maroon-800/20 font-mono text-sm" value={mlForm.content} onChange={e => setMLForm({ ...mlForm, content: e.target.value })} />
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={mlForm.is_published} onChange={e => setMLForm({ ...mlForm, is_published: e.target.checked })} className="w-4 h-4 rounded text-maroon-800 focus:ring-maroon-800/20" />
+                      <span className="text-sm font-bold text-slate-600">Published</span>
+                    </label>
+                  </div>
+                  <div className="flex justify-end gap-3 pt-2">
+                    <button onClick={() => { setShowMLForm(false); setEditingMLId(null); setMLForm({ title: '', content: '', summary: '', image_url: '', category: 'General', is_published: true }); }} className="px-5 py-2.5 rounded-lg font-bold text-slate-500 hover:bg-slate-100 transition-colors flex items-center gap-2">
+                      <X size={18} /> Cancel
+                    </button>
+                    <button onClick={handleSaveML} className="px-6 py-2.5 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition-colors flex items-center gap-2">
+                      <Save size={18} /> {editingMLId ? 'Update' : 'Publish'}
+                    </button>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            <div className="grid gap-6">
+              {mlPosts.length === 0 ? (
+                <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-300 text-slate-400">No lessons found. Enlighten the students with a new one!</div>
+              ) : mlPosts.map(post => (
+                <div key={post.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 flex gap-6 hover:shadow-md transition-shadow">
+                  {post.image_url
+                    ? <img src={post.image_url} alt="" className="w-40 h-28 object-cover rounded-xl bg-slate-100" />
+                    : <div className="w-40 h-28 bg-slate-50 rounded-xl flex items-center justify-center border border-slate-100"><BookOpen size={32} className="text-slate-200" /></div>
+                  }
+                  <div className="flex-1">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 text-[10px] font-black uppercase tracking-wider">{post.category}</span>
+                          {!post.is_published && <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-wider">Draft</span>}
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-900 leading-tight">{post.title}</h3>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => startEditML(post)} className="p-2 text-slate-400 hover:text-maroon-800 hover:bg-maroon-50 rounded-lg transition-colors"><Edit3 size={18} /></button>
+                        <button onClick={() => handleDeleteML(post.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={18} /></button>
+                      </div>
+                    </div>
+                    <p className="text-slate-500 text-sm mt-3 line-clamp-2">{post.summary || 'No summary provided.'}</p>
                   </div>
                 </div>
               ))}
