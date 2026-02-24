@@ -76,6 +76,7 @@ function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
+  const [isDataLoading, setIsDataLoading] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -110,14 +111,18 @@ function App() {
   };
 
   const loadAll = async () => {
-    loadNews();
-    loadNotifications();
-    loadMLPosts();
-    loadConfigs();
-    loadUsers();
-    loadModeration();
-    loadStats();
-    loadRealms();
+    setIsDataLoading(true);
+    await Promise.all([
+      loadNews(),
+      loadNotifications(),
+      loadMLPosts(),
+      loadConfigs(),
+      loadUsers(),
+      loadModeration(),
+      loadStats(),
+      loadRealms()
+    ]);
+    setIsDataLoading(false);
   };
 
   const loadNews = async () => {
@@ -370,7 +375,16 @@ function App() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans">
+    <div className="min-h-screen bg-slate-50 font-sans relative">
+      {/* Global Loading Overlay */}
+      {isDataLoading && (
+        <div className="fixed inset-0 bg-white/60 backdrop-blur-[2px] z-[100] flex items-center justify-center transition-all duration-300">
+          <div className="bg-white p-6 rounded-3xl shadow-2xl border border-slate-100 flex flex-col items-center gap-4">
+            <div className="w-12 h-12 border-4 border-maroon-100 border-t-maroon-800 rounded-full animate-spin" />
+            <p className="text-sm font-black text-slate-800 uppercase tracking-widest animate-pulse">Syncing Data...</p>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <header className="bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center sticky top-0 z-10">
         <div className="flex items-center gap-3">
@@ -833,6 +847,7 @@ function App() {
                             <input value={realmForm.name || ''} onChange={e => setRealmForm({ ...realmForm, name: e.target.value })} className="flex-1 p-1 border rounded text-sm font-bold text-slate-800" placeholder="Name" />
                           </div>
                           <textarea value={realmForm.short_desc || ''} onChange={e => setRealmForm({ ...realmForm, short_desc: e.target.value })} className="w-full p-2 border rounded text-xs text-slate-600 h-16" placeholder="Short Desc" />
+                          <textarea value={realmForm.description || ''} onChange={e => setRealmForm({ ...realmForm, description: e.target.value })} className="w-full p-2 border rounded text-xs text-slate-600 h-32" placeholder="Full Description (HTML/Markdown supported)" />
                           <input value={realmForm.image_url || ''} onChange={e => setRealmForm({ ...realmForm, image_url: e.target.value })} className="w-full p-1 border rounded text-xs text-slate-600" placeholder="Image filename (e.g. Realm_01.jpg)" />
 
                           <div className="grid grid-cols-3 gap-2 mt-2">
