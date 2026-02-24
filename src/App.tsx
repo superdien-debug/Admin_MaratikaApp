@@ -3,10 +3,11 @@ import { supabase } from './lib/supabase';
 import { newsAdminService, type NewsArticle } from './services/newsAdminService';
 import { notificationAdminService, type AppNotification } from './services/notificationAdminService';
 import { microLearningAdminService, type MicroLearningPost } from './services/microLearningAdminService';
-import { Plus, Trash2, Edit3, Save, X, Newspaper, LogOut, Lock, Bell, Calendar, Settings, Sliders, Users, LayoutDashboard, ShieldCheck, ShieldAlert, BookOpen } from 'lucide-react';
+import { rebirthAdminService, type Realm } from './services/rebirthAdminService';
+import { Plus, Trash2, Edit3, Save, X, Newspaper, LogOut, Lock, Bell, Calendar, Settings, Sliders, Users, LayoutDashboard, ShieldCheck, ShieldAlert, BookOpen, Dices } from 'lucide-react';
 import { format } from 'date-fns';
 
-type Tab = 'news' | 'notifications' | 'settings' | 'users' | 'dashboard' | 'moderation' | 'micro_learning';
+type Tab = 'news' | 'notifications' | 'settings' | 'users' | 'dashboard' | 'moderation' | 'micro_learning' | 'realms';
 
 type AppConfig = {
   key: string;
@@ -66,6 +67,11 @@ function App() {
   // Dashboard stats
   const [stats, setStats] = useState({ users: 0, practices: 0, logs: 0, news: 0 });
 
+  // Realms state
+  const [realms, setRealms] = useState<Realm[]>([]);
+  const [editingRealmId, setEditingRealmId] = useState<number | null>(null);
+  const [realmForm, setRealmForm] = useState<Partial<Realm>>({});
+
   // Auth inputs
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -111,6 +117,7 @@ function App() {
     loadUsers();
     loadModeration();
     loadStats();
+    loadRealms();
   };
 
   const loadNews = async () => {
@@ -165,6 +172,13 @@ function App() {
         supabase.from('news').select('id', { count: 'exact', head: true }),
       ]);
       setStats({ users: u.count || 0, practices: p.count || 0, logs: l.count || 0, news: n.count || 0 });
+    } catch (err) { console.error(err); }
+  };
+
+  const loadRealms = async () => {
+    try {
+      const data = await rebirthAdminService.getAllRealms();
+      setRealms(data);
     } catch (err) { console.error(err); }
   };
 
@@ -273,6 +287,26 @@ function App() {
     try { await supabase.from('practice_logs').delete().eq('id', id); loadModeration(); } catch { alert('Failed to delete'); }
   };
 
+  // Realms handlers
+  const startEditRealm = (realm: Realm) => {
+    setEditingRealmId(realm.id);
+    setRealmForm(realm);
+  };
+
+  const handleSaveRealm = async () => {
+    if (!editingRealmId) return;
+    try {
+      await rebirthAdminService.updateRealm(editingRealmId, realmForm);
+      setEditingRealmId(null);
+      setRealmForm({});
+      loadRealms();
+      alert('Realm updated successfully!');
+    } catch (err) {
+      alert('Failed to update realm. Does your admin account have RLS access?');
+      console.error(err);
+    }
+  };
+
   // ── Render gates ──
   if (loading) {
     return (
@@ -329,6 +363,7 @@ function App() {
     { id: 'users', label: 'Users', icon: <Users size={18} /> },
     { id: 'news', label: 'News', icon: <Newspaper size={18} /> },
     { id: 'micro_learning', label: 'Micro Learning', icon: <BookOpen size={18} /> },
+    { id: 'realms', label: 'Rebirth Realms', icon: <Dices size={18} /> },
     { id: 'notifications', label: 'Notifications', icon: <Bell size={18} /> },
     { id: 'moderation', label: 'Moderation', icon: <ShieldCheck size={18} /> },
     { id: 'settings', label: 'Settings', icon: <Settings size={18} /> },
@@ -760,6 +795,90 @@ function App() {
             {configs.length === 0 && (
               <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200 text-slate-400">
                 No configurations found. Add rows to the <code className="text-xs bg-slate-100 px-1.5 py-0.5 rounded">app_configs</code> table.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Realms ── */}
+        {activeTab === 'realms' && (
+          <div className="grid gap-6">
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex justify-between items-center">
+              <div>
+                <h3 className="font-bold text-slate-800">Rebirth Realms Database</h3>
+                <p className="text-slate-500 text-sm mt-1">Manage the 104 realms available in the Rebirth Game.</p>
+              </div>
+            </div>
+
+            {realms.length === 0 ? (
+              <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-300 text-slate-400">
+                <Dices className="mx-auto mb-4 text-slate-300" size={48} />
+                <p>Database is empty. Please run the <code className="text-xs bg-slate-100 px-1 py-0.5 rounded">20260224_ADD_REBIRTH_GAME.sql</code> migration in Supabase SQL Editor to populate.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {realms.map(realm => (
+                  <div key={realm.id} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex gap-4">
+                    {realm.image_url ? (
+                      <img src={`https://fktxnyltyehpbouqfuxv.supabase.co/storage/v1/object/public/images/rebird/${realm.image_url}`} alt={realm.name} className="w-24 h-24 rounded-lg object-cover bg-slate-100" />
+                    ) : (
+                      <div className="w-24 h-24 rounded-lg bg-slate-100 flex items-center justify-center"><Dices className="text-slate-300" /></div>
+                    )}
+
+                    <div className="flex-1">
+                      {editingRealmId === realm.id ? (
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-slate-400 w-8">{realm.id}</span>
+                            <input value={realmForm.name || ''} onChange={e => setRealmForm({ ...realmForm, name: e.target.value })} className="flex-1 p-1 border rounded text-sm font-bold text-slate-800" placeholder="Name" />
+                          </div>
+                          <textarea value={realmForm.short_desc || ''} onChange={e => setRealmForm({ ...realmForm, short_desc: e.target.value })} className="w-full p-2 border rounded text-xs text-slate-600 h-16" placeholder="Short Desc" />
+                          <input value={realmForm.image_url || ''} onChange={e => setRealmForm({ ...realmForm, image_url: e.target.value })} className="w-full p-1 border rounded text-xs text-slate-600" placeholder="Image filename (e.g. Realm_01.jpg)" />
+
+                          <div className="grid grid-cols-3 gap-2 mt-2">
+                            {Array.from({ length: 6 }, (_, i) => i + 1).map(d => (
+                              <div key={d} className="flex items-center gap-1">
+                                <Dices size={12} className="text-slate-400" />
+                                <span className="text-[10px] font-bold text-slate-500">{d}:</span>
+                                <input type="number" value={(realmForm as any)[`dice_${d}`] || 0} onChange={e => setRealmForm({ ...realmForm, [`dice_${d}`]: parseInt(e.target.value) })} className="w-10 p-1 border rounded text-xs text-center" />
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="flex items-center gap-2 mt-2">
+                            <span className="text-xs font-bold text-slate-500">Life Days:</span>
+                            <input type="number" value={realmForm.life_days || 0} onChange={e => setRealmForm({ ...realmForm, life_days: parseInt(e.target.value) })} className="w-16 p-1 border rounded text-xs text-center" />
+                          </div>
+
+                          <div className="flex gap-2 pt-2">
+                            <button onClick={handleSaveRealm} className="flex-1 bg-maroon-800 text-white rounded text-xs font-bold py-1.5 hover:bg-maroon-900 transition-colors">Save</button>
+                            <button onClick={() => setEditingRealmId(null)} className="px-3 bg-slate-100 text-slate-600 rounded text-xs font-bold hover:bg-slate-200 transition-colors">Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-black mr-2">#{realm.id}</span>
+                              <span className="font-bold text-slate-800">{realm.name}</span>
+                            </div>
+                            <button onClick={() => startEditRealm(realm)} className="p-1.5 text-slate-400 hover:text-maroon-800 hover:bg-maroon-50 rounded-lg transition-colors"><Edit3 size={14} /></button>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-1 mb-3 line-clamp-2">{realm.short_desc}</p>
+
+                          <div className="grid grid-cols-6 gap-1 bg-slate-50 p-2 rounded-lg mt-auto">
+                            {Array.from({ length: 6 }, (_, i) => i + 1).map(d => (
+                              <div key={d} className="flex flex-col items-center">
+                                <span className="text-[9px] font-black text-slate-400">{d}</span>
+                                <span className="text-xs font-bold text-slate-700">{(realm as any)[`dice_${d}`]}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
