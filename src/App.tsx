@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
+import clsx from 'clsx';
 import { newsAdminService, type NewsArticle } from './services/newsAdminService';
 import { notificationAdminService, type AppNotification } from './services/notificationAdminService';
 import { microLearningAdminService, type MicroLearningPost } from './services/microLearningAdminService';
@@ -42,7 +43,7 @@ function App() {
   const [mlPosts, setMLPosts] = useState<MicroLearningPost[]>([]);
   const [editingMLId, setEditingMLId] = useState<string | null>(null);
   const [showMLForm, setShowMLForm] = useState(false);
-  const [mlForm, setMLForm] = useState<Partial<MicroLearningPost>>({ title: '', content: '', summary: '', image_url: '', category: 'General', is_published: true });
+  const [mlForm, setMLForm] = useState<Partial<MicroLearningPost>>({ title: '', content: '', summary: '', image_url: '', category: 'General', is_published: true, price_mpoints: 0 });
 
   // Notifications state
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -237,7 +238,7 @@ function App() {
       if (editingMLId) await microLearningAdminService.update(editingMLId, postData);
       else await microLearningAdminService.create(postData);
       setShowMLForm(false); setEditingMLId(null);
-      setMLForm({ title: '', content: '', summary: '', image_url: '', category: 'General', is_published: true });
+      setMLForm({ title: '', content: '', summary: '', image_url: '', category: 'General', is_published: true, price_mpoints: 0 });
       loadMLPosts();
     } catch { alert('Failed to save micro-learning post'); }
   };
@@ -471,7 +472,7 @@ function App() {
           )}
           {activeTab === 'micro_learning' && (
             <button
-              onClick={() => { setEditingMLId(null); setMLForm({ title: '', content: '', summary: '', image_url: '', category: 'General', is_published: true }); setShowMLForm(true); }}
+              onClick={() => { setEditingMLId(null); setMLForm({ title: '', content: '', summary: '', image_url: '', category: 'General', is_published: true, price_mpoints: 0 }); setShowMLForm(true); }}
               className="bg-maroon-800 text-white px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-maroon-900 transition-colors shadow-sm shadow-maroon-800/20"
             >
               <Plus size={16} /> New Lesson
@@ -619,10 +620,11 @@ function App() {
               <section className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-8">
                 <h2 className="text-xl font-bold mb-6 text-slate-800">{editingMLId ? 'Edit Lesson' : 'Create Micro Learning Lesson'}</h2>
                 <div className="grid gap-5">
-                  <div className="grid grid-cols-2 gap-5">
-                    <input type="text" placeholder="Lesson Title" className="w-full p-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-maroon-800/20" value={mlForm.title} onChange={e => setMLForm({ ...mlForm, title: e.target.value })} />
-                    <input type="text" placeholder="Category (e.g., Mind, Wisdom)" className="w-full p-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-maroon-800/20" value={mlForm.category} onChange={e => setMLForm({ ...mlForm, category: e.target.value })} />
+                  <div className="grid grid-cols-3 gap-5">
+                    <input type="text" placeholder="Lesson Title" className="col-span-2 w-full p-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-maroon-800/20" value={mlForm.title} onChange={e => setMLForm({ ...mlForm, title: e.target.value })} />
+                    <input type="number" placeholder="Price (M-points)" className="w-full p-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-maroon-800/20" value={mlForm.price_mpoints} onChange={e => setMLForm({ ...mlForm, price_mpoints: parseInt(e.target.value) || 0 })} />
                   </div>
+                  <input type="text" placeholder="Category (e.g., Mind, Wisdom)" className="w-full p-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-maroon-800/20" value={mlForm.category} onChange={e => setMLForm({ ...mlForm, category: e.target.value })} />
                   <input type="text" placeholder="Image URL" className="w-full p-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-maroon-800/20" value={mlForm.image_url} onChange={e => setMLForm({ ...mlForm, image_url: e.target.value })} />
                   <textarea placeholder="Teaser Summary (appears on cards)" className="w-full p-3 rounded-lg border border-slate-200 h-20 focus:outline-none focus:ring-2 focus:ring-maroon-800/20" value={mlForm.summary} onChange={e => setMLForm({ ...mlForm, summary: e.target.value })} />
                   <textarea placeholder="Main content (Markdown/HTML supported)" className="w-full p-3 rounded-lg border border-slate-200 h-64 focus:outline-none focus:ring-2 focus:ring-maroon-800/20 font-mono text-sm" value={mlForm.content} onChange={e => setMLForm({ ...mlForm, content: e.target.value })} />
@@ -633,7 +635,7 @@ function App() {
                     </label>
                   </div>
                   <div className="flex justify-end gap-3 pt-2">
-                    <button onClick={() => { setShowMLForm(false); setEditingMLId(null); setMLForm({ title: '', content: '', summary: '', image_url: '', category: 'General', is_published: true }); }} className="px-5 py-2.5 rounded-lg font-bold text-slate-500 hover:bg-slate-100 transition-colors flex items-center gap-2">
+                    <button onClick={() => { setShowMLForm(false); setEditingMLId(null); setMLForm({ title: '', content: '', summary: '', image_url: '', category: 'General', is_published: true, price_mpoints: 0 }); }} className="px-5 py-2.5 rounded-lg font-bold text-slate-500 hover:bg-slate-100 transition-colors flex items-center gap-2">
                       <X size={18} /> Cancel
                     </button>
                     <button onClick={handleSaveML} className="px-6 py-2.5 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition-colors flex items-center gap-2">
@@ -658,6 +660,9 @@ function App() {
                       <div>
                         <div className="flex items-center gap-2 mb-1">
                           <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 text-[10px] font-black uppercase tracking-wider">{post.category}</span>
+                          <span className={clsx("px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider", post.price_mpoints > 0 ? "bg-amber-100 text-amber-900" : "bg-emerald-50 text-emerald-700")}>
+                            {post.price_mpoints > 0 ? `${post.price_mpoints} M-points` : 'Free'}
+                          </span>
                           {!post.is_published && <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-wider">Draft</span>}
                         </div>
                         <h3 className="text-lg font-bold text-slate-900 leading-tight">{post.title}</h3>

@@ -9,6 +9,7 @@ export interface MicroLearningPost {
     author_id?: string;
     category: string;
     is_published: boolean;
+    price_mpoints: number;
     created_at?: string;
     updated_at?: string;
 }
