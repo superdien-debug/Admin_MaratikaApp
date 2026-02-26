@@ -4,7 +4,7 @@ import { newsAdminService, type NewsArticle } from './services/newsAdminService'
 import { notificationAdminService, type AppNotification } from './services/notificationAdminService';
 import { microLearningAdminService, type MicroLearningPost } from './services/microLearningAdminService';
 import { rebirthAdminService, type Realm } from './services/rebirthAdminService';
-import { Plus, Trash2, Edit3, Save, X, Newspaper, LogOut, Lock, Bell, Calendar, Settings, Sliders, Users, LayoutDashboard, ShieldCheck, ShieldAlert, BookOpen, Dices } from 'lucide-react';
+import { Plus, Trash2, Edit3, Save, X, Newspaper, LogOut, Lock, Bell, Calendar, Settings, Sliders, Users, LayoutDashboard, ShieldCheck, ShieldAlert, BookOpen, Dices, Check } from 'lucide-react';
 import { format } from 'date-fns';
 
 type Tab = 'news' | 'notifications' | 'settings' | 'users' | 'dashboard' | 'moderation' | 'micro_learning' | 'realms';
@@ -71,6 +71,8 @@ function App() {
   const [realms, setRealms] = useState<Realm[]>([]);
   const [editingRealmId, setEditingRealmId] = useState<number | null>(null);
   const [realmForm, setRealmForm] = useState<Partial<Realm>>({});
+  const [publicPractices, setPublicPractices] = useState<any[]>([]);
+  const [selectedPractices, setSelectedPractices] = useState<string[]>([]);
 
   // Auth inputs
   const [email, setEmail] = useState('');
@@ -120,9 +122,17 @@ function App() {
       loadUsers(),
       loadModeration(),
       loadStats(),
-      loadRealms()
+      loadRealms(),
+      loadPublicPractices()
     ]);
     setIsDataLoading(false);
+  };
+
+  const loadPublicPractices = async () => {
+    try {
+      const { data } = await supabase.from('practices').select('id, title').eq('is_public', true).order('title');
+      setPublicPractices(data || []);
+    } catch (err) { console.error(err); }
   };
 
   const loadNews = async () => {
@@ -293,23 +303,38 @@ function App() {
   };
 
   // Realms handlers
-  const startEditRealm = (realm: Realm) => {
+  const startEditRealm = async (realm: Realm) => {
     setEditingRealmId(realm.id);
     setRealmForm(realm);
+    try {
+      const pids = await rebirthAdminService.getRealmPractices(realm.id);
+      setSelectedPractices(pids);
+    } catch (err) {
+      console.error('Failed to load realm practices', err);
+      setSelectedPractices([]);
+    }
   };
 
   const handleSaveRealm = async () => {
     if (!editingRealmId) return;
     try {
       await rebirthAdminService.updateRealm(editingRealmId, realmForm);
+      await rebirthAdminService.updateRealmPractices(editingRealmId, selectedPractices);
       setEditingRealmId(null);
       setRealmForm({});
+      setSelectedPractices([]);
       loadRealms();
       alert('Realm updated successfully!');
     } catch (err) {
       alert('Failed to update realm. Does your admin account have RLS access?');
       console.error(err);
     }
+  };
+
+  const togglePractice = (id: string) => {
+    setSelectedPractices(prev =>
+      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
+    );
   };
 
   // ── Render gates ──
@@ -865,6 +890,33 @@ function App() {
                             <input type="number" value={realmForm.life_days || 0} onChange={e => setRealmForm({ ...realmForm, life_days: parseInt(e.target.value) })} className="w-16 p-1 border rounded text-xs text-center" />
                           </div>
 
+                          <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                            <div className="flex items-center gap-2 mb-2">
+                              <BookOpen size={14} className="text-maroon-800" />
+                              <span className="text-xs font-black text-slate-800 uppercase tracking-wider">Mandatory Practices</span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {publicPractices.map(p => {
+                                const isSelected = selectedPractices.includes(p.id);
+                                return (
+                                  <button
+                                    key={p.id}
+                                    type="button"
+                                    onClick={() => togglePractice(p.id)}
+                                    className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all flex items-center gap-1.5 border-2 ${isSelected
+                                      ? 'bg-maroon-800 text-white border-maroon-800 shadow-md transform scale-105'
+                                      : 'bg-white text-slate-400 border-slate-100 hover:border-maroon-800/20 hover:text-maroon-800'
+                                      }`}
+                                  >
+                                    {isSelected && <Check size={12} strokeWidth={3} />}
+                                    {p.title}
+                                  </button>
+                                );
+                              })}
+                              {publicPractices.length === 0 && <p className="text-[10px] text-slate-400 italic">No public practices available.</p>}
+                            </div>
+                          </div>
+
                           <div className="flex gap-2 pt-2">
                             <button onClick={handleSaveRealm} className="flex-1 bg-maroon-800 text-white rounded text-xs font-bold py-1.5 hover:bg-maroon-900 transition-colors">Save</button>
                             <button onClick={() => setEditingRealmId(null)} className="px-3 bg-slate-100 text-slate-600 rounded text-xs font-bold hover:bg-slate-200 transition-colors">Cancel</button>
@@ -889,6 +941,8 @@ function App() {
                               </div>
                             ))}
                           </div>
+
+                          {/* We could fetch and show linked practices here too if we update the Realm type */}
                         </div>
                       )}
                     </div>

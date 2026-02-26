@@ -31,5 +31,36 @@ export const rebirthAdminService = {
             .update(updates)
             .eq('id', id);
         if (error) throw error;
+    },
+
+    async getRealmPractices(realmId: number): Promise<string[]> {
+        const { data, error } = await supabase
+            .from('game_rebirth_realm_practices')
+            .select('practice_id')
+            .eq('realm_id', realmId);
+        if (error) throw error;
+        return data.map(rp => rp.practice_id);
+    },
+
+    async updateRealmPractices(realmId: number, practiceIds: string[]): Promise<void> {
+        try {
+            // Remove existing links
+            const { error: delError } = await supabase
+                .from('game_rebirth_realm_practices')
+                .delete()
+                .eq('realm_id', realmId);
+            if (delError) throw delError;
+
+            if (practiceIds.length === 0) return;
+
+            // Insert new links
+            const { error: insError } = await supabase
+                .from('game_rebirth_realm_practices')
+                .insert(practiceIds.map(pid => ({ realm_id: realmId, practice_id: pid })));
+            if (insError) throw insError;
+        } catch (err) {
+            console.error('[RebirthAdminService] updateRealmPractices failed:', err);
+            throw err;
+        }
     }
 };
