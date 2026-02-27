@@ -5,10 +5,12 @@ import { newsAdminService, type NewsArticle } from './services/newsAdminService'
 import { notificationAdminService, type AppNotification } from './services/notificationAdminService';
 import { microLearningAdminService, type MicroLearningPost } from './services/microLearningAdminService';
 import { rebirthAdminService, type Realm } from './services/rebirthAdminService';
-import { Plus, Trash2, Edit3, Save, X, Newspaper, LogOut, Lock, Bell, Calendar, Settings, Sliders, Users, LayoutDashboard, ShieldCheck, ShieldAlert, BookOpen, Dices, Check } from 'lucide-react';
+import { surveyAdminService, type SurveyQuestion } from './services/surveyAdminService';
+import { Plus, Trash2, Edit3, Save, X, Newspaper, LogOut, Lock, Bell, Calendar, Settings, Sliders, Users, LayoutDashboard, ShieldCheck, ShieldAlert, BookOpen, Dices, Check, HelpCircle } from 'lucide-react';
 import { format } from 'date-fns';
+import { twMerge } from 'tailwind-merge';
 
-type Tab = 'news' | 'notifications' | 'settings' | 'users' | 'dashboard' | 'moderation' | 'micro_learning' | 'realms';
+type Tab = 'news' | 'notifications' | 'settings' | 'users' | 'dashboard' | 'moderation' | 'micro_learning' | 'realms' | 'survey';
 
 type AppConfig = {
   key: string;
@@ -60,10 +62,26 @@ function App() {
   // Users state
   const [users, setUsers] = useState<UserProfile[]>([]);
 
-  // Moderation state
+  // Moderation & Practice Management state
   const [allPractices, setAllPractices] = useState<any[]>([]);
   const [allLogs, setAllLogs] = useState<any[]>([]);
-  const [modSubTab, setModSubTab] = useState<'practices' | 'logs'>('practices');
+  const [modSubTab, setModSubTab] = useState<'practices' | 'logs' | 'manage'>('practices');
+  const [editingPracticeId, setEditingPracticeId] = useState<string | null>(null);
+  const [showPracticeForm, setShowPracticeForm] = useState(false);
+  const [practiceForm, setPracticeForm] = useState<any>({
+    title: '',
+    category: 'Guru Yoga',
+    description: '',
+    library_group: 'AP',
+    is_public: true,
+    is_active: true,
+    target_type: 'duration',
+    daily_target: 20,
+    target_unit: 'minutes'
+  });
+
+  const AP_CATEGORIES = ['Guru Yoga', 'Quy y', 'Mantra', 'Sadhana', 'Study'];
+  const AH_CATEGORIES = ['Địa Đại', 'Thủy Đại', 'Hỏa Đại', 'Phong Đại', 'Không Đại'];
 
   // Dashboard stats
   const [stats, setStats] = useState({ users: 0, practices: 0, logs: 0, news: 0 });
@@ -74,6 +92,17 @@ function App() {
   const [realmForm, setRealmForm] = useState<Partial<Realm>>({});
   const [publicPractices, setPublicPractices] = useState<any[]>([]);
   const [selectedPractices, setSelectedPractices] = useState<string[]>([]);
+
+  // Survey state
+  const [surveyQuestions, setSurveyQuestions] = useState<SurveyQuestion[]>([]);
+  const [showSurveyForm, setShowSurveyForm] = useState(false);
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
+  const [surveyForm, setSurveyForm] = useState<Partial<SurveyQuestion>>({
+    text: '',
+    is_buddhist_only: false,
+    order_index: 0,
+    is_active: true
+  });
 
   // Auth inputs
   const [email, setEmail] = useState('');
@@ -124,7 +153,8 @@ function App() {
       loadModeration(),
       loadStats(),
       loadRealms(),
-      loadPublicPractices()
+      loadPublicPractices(),
+      loadSurveyQuestions()
     ]);
     setIsDataLoading(false);
   };
@@ -166,7 +196,7 @@ function App() {
     try {
       const { data: practices } = await supabase
         .from('practices')
-        .select('id, title, created_at, profiles(display_name)')
+        .select('id, title, created_at, profiles(display_name), category, description, library_group, is_public, is_active, target_type, daily_target, target_unit')
         .order('created_at', { ascending: false });
       setAllPractices(practices || []);
 
@@ -195,6 +225,13 @@ function App() {
     try {
       const data = await rebirthAdminService.getAllRealms();
       setRealms(data);
+    } catch (err) { console.error(err); }
+  };
+
+  const loadSurveyQuestions = async () => {
+    try {
+      const data = await surveyAdminService.getAll();
+      setSurveyQuestions(data);
     } catch (err) { console.error(err); }
   };
 
@@ -292,15 +329,56 @@ function App() {
     } catch { alert('Failed to update role'); }
   };
 
-  // Moderation handlers
+  // Moderation & Practice handlers
+  const handleSavePractice = async () => {
+    if (!practiceForm.title) return;
+    try {
+      const payload = {
+        ...practiceForm,
+        updated_at: new Date().toISOString()
+      };
+      if (editingPracticeId) {
+        const { error } = await supabase.from('practices').update(payload).eq('id', editingPracticeId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('practices').insert([{ ...payload, user_id: session.user.id }]);
+        if (error) throw error;
+      }
+      setShowPracticeForm(false);
+      setEditingPracticeId(null);
+      loadModeration();
+    } catch (e) {
+      console.error(e);
+      alert('Error saving practice');
+    }
+  };
+
+  const startEditPractice = (item: any) => {
+    setEditingPracticeId(item.id);
+    setPracticeForm({
+      title: item.title,
+      category: item.category,
+      description: item.description,
+      library_group: item.library_group || 'AP',
+      is_public: item.is_public,
+      is_active: item.is_active,
+      target_type: item.target_type,
+      daily_target: item.daily_target,
+      target_unit: item.target_unit
+    });
+    setShowPracticeForm(true);
+  };
+
   const handleDeletePractice = async (id: string) => {
-    if (!confirm('Delete this practice?')) return;
-    try { await supabase.from('practices').delete().eq('id', id); loadModeration(); } catch { alert('Failed to delete'); }
+    if (!confirm('Are you sure you want to delete this practice? This cannot be undone.')) return;
+    const { error } = await supabase.from('practices').delete().eq('id', id);
+    if (!error) loadModeration();
   };
 
   const handleDeleteLog = async (id: string) => {
-    if (!confirm('Delete this log?')) return;
-    try { await supabase.from('practice_logs').delete().eq('id', id); loadModeration(); } catch { alert('Failed to delete'); }
+    if (!confirm('Delete log?')) return;
+    const { error } = await supabase.from('practice_logs').delete().eq('id', id);
+    if (!error) loadModeration();
   };
 
   // Realms handlers
@@ -327,7 +405,7 @@ function App() {
       loadRealms();
       alert('Realm updated successfully!');
     } catch (err) {
-      alert('Failed to update realm. Does your admin account have RLS access?');
+      alert('Failed to update realm.');
       console.error(err);
     }
   };
@@ -338,7 +416,30 @@ function App() {
     );
   };
 
-  // ── Render gates ──
+  // Survey handlers
+  const handleSaveSurveyQuestion = async () => {
+    try {
+      if (editingQuestionId) await surveyAdminService.update(editingQuestionId, surveyForm);
+      else await surveyAdminService.create(surveyForm);
+      setShowSurveyForm(false);
+      setEditingQuestionId(null);
+      setSurveyForm({ text: '', is_buddhist_only: false, order_index: 0, is_active: true });
+      loadSurveyQuestions();
+    } catch { alert('Failed to save survey question'); }
+  };
+
+  const handleDeleteSurveyQuestion = async (id: string) => {
+    if (!confirm('Delete this question?')) return;
+    try { await surveyAdminService.delete(id); loadSurveyQuestions(); } catch { alert('Failed to delete'); }
+  };
+
+  const startEditSurveyQuestion = (q: SurveyQuestion) => {
+    setEditingQuestionId(q.id);
+    setSurveyForm(q);
+    setShowSurveyForm(true);
+  };
+
+  // ── Render ──
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -349,26 +450,19 @@ function App() {
 
   if (!session) {
     return (
-      <div className="min-h-screen bg-maroon-800 flex items-center justify-center p-6 bg-[radial-gradient(circle_at_top_left,rgba(212,175,55,0.1),transparent)]">
+      <div className="min-h-screen bg-maroon-800 flex items-center justify-center p-6">
         <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl p-10">
           <div className="flex flex-col items-center mb-8">
             <div className="w-16 h-16 bg-maroon-50 rounded-2xl flex items-center justify-center mb-4">
               <Lock className="text-maroon-800" size={32} />
             </div>
             <h1 className="text-2xl font-black text-slate-900">Vajrayana Admin</h1>
-            <p className="text-slate-400 text-sm mt-1">Authorized Access Only</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1 block">Email Address</label>
-              <input type="email" required className="w-full p-4 rounded-xl bg-slate-50 border-none focus:ring-2 focus:ring-maroon-800/20 outline-none" value={email} onChange={e => setEmail(e.target.value)} />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1 block">Password</label>
-              <input type="password" required className="w-full p-4 rounded-xl bg-slate-50 border-none focus:ring-2 focus:ring-maroon-800/20 outline-none" value={password} onChange={e => setPassword(e.target.value)} />
-            </div>
-            <button type="submit" disabled={authLoading} className="w-full bg-maroon-800 text-white p-4 rounded-xl font-black uppercase tracking-widest hover:bg-maroon-900 transition-colors shadow-lg shadow-maroon-800/20 disabled:opacity-50">
-              {authLoading ? 'Authenticating...' : 'Sign In'}
+            <input type="email" required placeholder="Email" className="w-full p-4 rounded-xl bg-slate-50 border-none focus:ring-2 focus:ring-maroon-800/20 shadow-inner" value={email} onChange={e => setEmail(e.target.value)} />
+            <input type="password" required placeholder="Password" className="w-full p-4 rounded-xl bg-slate-50 border-none focus:ring-2 focus:ring-maroon-800/20 shadow-inner" value={password} onChange={e => setPassword(e.target.value)} />
+            <button type="submit" disabled={authLoading} className="w-full bg-maroon-800 text-white p-4 rounded-xl font-black uppercase shadow-lg shadow-maroon-800/20">
+              {authLoading ? 'Signing In...' : 'Sign In'}
             </button>
           </form>
         </div>
@@ -378,12 +472,12 @@ function App() {
 
   if (!isAdmin) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-        <div className="max-w-sm w-full bg-white rounded-2xl shadow-sm border border-slate-200 p-8 text-center">
-          <X className="text-red-500 mx-auto mb-4" size={48} />
-          <h2 className="text-xl font-bold text-slate-900">Access Denied</h2>
-          <p className="text-slate-500 mt-2 mb-6">Your account doesn't have administrative privileges.</p>
-          <button onClick={handleLogout} className="text-maroon-800 font-bold hover:underline">Sign out and try another account</button>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-center">
+        <div className="bg-white p-10 rounded-3xl shadow-sm border border-slate-100 max-w-sm">
+          <ShieldAlert className="text-red-500 mx-auto mb-4" size={48} />
+          <h2 className="text-xl font-bold">Access Denied</h2>
+          <p className="text-slate-500 mt-2 mb-6">Admin privileges required.</p>
+          <button onClick={handleLogout} className="text-maroon-800 font-bold hover:underline">Sign Out</button>
         </div>
       </div>
     );
@@ -394,119 +488,55 @@ function App() {
     { id: 'users', label: 'Users', icon: <Users size={18} /> },
     { id: 'news', label: 'News', icon: <Newspaper size={18} /> },
     { id: 'micro_learning', label: 'Micro Learning', icon: <BookOpen size={18} /> },
-    { id: 'realms', label: 'Rebirth Realms', icon: <Dices size={18} /> },
-    { id: 'notifications', label: 'Notifications', icon: <Bell size={18} /> },
+    { id: 'realms', label: 'Realms', icon: <Dices size={18} /> },
+    { id: 'notifications', label: 'Notifs', icon: <Bell size={18} /> },
     { id: 'moderation', label: 'Moderation', icon: <ShieldCheck size={18} /> },
+    { id: 'survey', label: 'Survey', icon: <HelpCircle size={18} /> },
     { id: 'settings', label: 'Settings', icon: <Settings size={18} /> },
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans relative">
-      {/* Global Loading Overlay */}
-      {isDataLoading && (
-        <div className="fixed inset-0 bg-white/60 backdrop-blur-[2px] z-[100] flex items-center justify-center transition-all duration-300">
-          <div className="bg-white p-6 rounded-3xl shadow-2xl border border-slate-100 flex flex-col items-center gap-4">
-            <div className="w-12 h-12 border-4 border-maroon-100 border-t-maroon-800 rounded-full animate-spin" />
-            <p className="text-sm font-black text-slate-800 uppercase tracking-widest animate-pulse">Syncing Data...</p>
-          </div>
-        </div>
-      )}
-      {/* Header */}
+    <div className="min-h-screen bg-slate-50 relative pb-20">
+      {isDataLoading && <div className="fixed top-0 left-0 right-0 h-1 bg-maroon-800 animate-pulse z-[100]" />}
+
       <header className="bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-maroon-800 rounded-xl flex items-center justify-center">
-            <ShieldAlert size={18} className="text-amber-400" />
-          </div>
-          <div>
-            <h1 className="text-lg font-black text-slate-900 leading-none">Maratika Admin</h1>
-            <p className="text-xs text-slate-400">Sangha Command Center</p>
-          </div>
+          <div className="w-9 h-9 bg-maroon-800 rounded-xl flex items-center justify-center text-white"><ShieldAlert size={18} /></div>
+          <h1 className="text-lg font-black text-slate-900 leading-none">Admin Portal</h1>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-slate-500">{session?.user?.email}</span>
-          <button onClick={handleLogout} className="p-2.5 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-all" title="Logout">
-            <LogOut size={20} />
-          </button>
+        <div className="flex items-center gap-4">
+          <span className="text-xs font-bold text-slate-400 bg-slate-50 px-3 py-1 rounded-full">{session.user.email}</span>
+          <button onClick={handleLogout} className="p-2 text-slate-400 hover:text-red-600 transition-colors"><LogOut size={20} /></button>
         </div>
       </header>
 
-      {/* Navigation tabs */}
-      <div className="bg-white border-b border-slate-200 px-8">
-        <nav className="flex gap-1">
+      <div className="bg-white border-b border-slate-200 px-6 overflow-x-auto whitespace-nowrap scrollbar-hide">
+        <nav className="flex max-w-7xl mx-auto">
           {tabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-3.5 text-sm font-bold border-b-2 transition-all ${activeTab === tab.id
-                ? 'border-maroon-800 text-maroon-800'
-                : 'border-transparent text-slate-400 hover:text-slate-700 hover:border-slate-300'
-                }`}
-            >
-              {tab.icon} {tab.label}
-            </button>
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={twMerge(
+              "px-5 py-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all",
+              activeTab === tab.id ? "border-maroon-800 text-maroon-800 bg-maroon-50/10" : "border-transparent text-slate-400 hover:text-slate-600"
+            )}>{tab.icon} {tab.label}</button>
           ))}
         </nav>
       </div>
 
-      {/* Tab action bar */}
-      <div className="bg-white border-b border-slate-100 px-8 py-3 flex justify-between items-center">
-        <h2 className="text-sm font-bold text-slate-500 uppercase tracking-widest">
-          {tabs.find(t => t.id === activeTab)?.label}
-        </h2>
-        <div className="flex gap-2">
-          {activeTab === 'news' && (
-            <button
-              onClick={() => { setEditingId(null); setForm({ title: '', content: '', excerpt: '', image_url: '' }); setShowForm(true); }}
-              className="bg-maroon-800 text-white px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-maroon-900 transition-colors shadow-sm shadow-maroon-800/20"
-            >
-              <Plus size={16} /> New Article
-            </button>
-          )}
-          {activeTab === 'notifications' && (
-            <button
-              onClick={() => { setEditingNotifId(null); setNotifForm({ title: '', content: '', scheduled_at: format(new Date(), "yyyy-MM-dd'T'HH:mm"), type: 'announcement' }); setShowNotifForm(true); }}
-              className="bg-maroon-800 text-white px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-maroon-900 transition-colors shadow-sm shadow-maroon-800/20"
-            >
-              <Plus size={16} /> New Notification
-            </button>
-          )}
-          {activeTab === 'micro_learning' && (
-            <button
-              onClick={() => { setEditingMLId(null); setMLForm({ title: '', content: '', summary: '', image_url: '', category: 'General', is_published: true, price_mpoints: 0 }); setShowMLForm(true); }}
-              className="bg-maroon-800 text-white px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-maroon-900 transition-colors shadow-sm shadow-maroon-800/20"
-            >
-              <Plus size={16} /> New Lesson
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Main content */}
-      <main className="max-w-7xl mx-auto px-8 py-8">
-
+      <main className="max-w-7xl mx-auto p-8">
         {/* ── Dashboard ── */}
         {activeTab === 'dashboard' && (
-          <div className="space-y-8">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
-              {[
-                { label: 'Total Users', value: stats.users, icon: <Users size={22} />, color: 'text-blue-600 bg-blue-50' },
-                { label: 'Practices', value: stats.practices, icon: <Newspaper size={22} />, color: 'text-purple-600 bg-purple-50' },
-                { label: 'Completions', value: stats.logs, icon: <ShieldCheck size={22} />, color: 'text-emerald-600 bg-emerald-50' },
-                { label: 'News Articles', value: stats.news, icon: <Bell size={22} />, color: 'text-amber-600 bg-amber-50' },
-              ].map(stat => (
-                <div key={stat.label} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${stat.color}`}>
-                    {stat.icon}
-                  </div>
-                  <p className="text-3xl font-black text-slate-900">{stat.value.toLocaleString()}</p>
-                  <p className="text-sm text-slate-400 font-bold uppercase tracking-wide mt-1">{stat.label}</p>
-                </div>
-              ))}
-            </div>
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-              <h3 className="font-bold text-slate-800 mb-2">Welcome back!</h3>
-              <p className="text-slate-500 text-sm">Use the tabs above to manage the Maratika community. You can publish news, send notifications, moderate practices, manage users, and configure app settings.</p>
-            </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+            {[
+              { l: 'Users', v: stats.users, i: <Users />, c: 'bg-blue-50 text-blue-600' },
+              { l: 'Practices', v: stats.practices, i: <BookOpen />, c: 'bg-indigo-50 text-indigo-600' },
+              { l: 'Logs', v: stats.logs, i: <Check />, c: 'bg-emerald-50 text-emerald-600' },
+              { l: 'News', v: stats.news, i: <Newspaper />, c: 'bg-amber-50 text-amber-600' },
+            ].map(s => (
+              <div key={s.l} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                <div className={twMerge("w-10 h-10 rounded-xl flex items-center justify-center mb-4 child-svg:w-5 child-svg:h-5", s.c)}>{s.i}</div>
+                <p className="text-3xl font-black text-slate-900">{s.v.toLocaleString()}</p>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">{s.l}</p>
+              </div>
+            ))}
           </div>
         )}
 
@@ -514,45 +544,22 @@ function App() {
         {activeTab === 'users' && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
             <table className="w-full text-left">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-100">
-                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">User</th>
-                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Role</th>
-                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Joined</th>
-                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">Actions</th>
-                </tr>
+              <thead className="bg-slate-50 border-b border-slate-100">
+                <tr><th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400">User</th><th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400">Role</th><th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 text-right">Action</th></tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {users.map(user => (
-                  <tr key={user.id} className="hover:bg-slate-50/50 transition-colors">
+                {users.map(u => (
+                  <tr key={u.id} className="hover:bg-slate-50/30">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        {user.avatar_url
-                          ? <img src={user.avatar_url} className="w-9 h-9 rounded-full object-cover" alt="" />
-                          : <div className="w-9 h-9 rounded-full bg-maroon-50 flex items-center justify-center text-maroon-800 font-black text-sm">{user.display_name?.[0] ?? '?'}</div>
-                        }
-                        <div>
-                          <p className="font-bold text-slate-800">{user.display_name || 'No Name'}</p>
-                          <p className="text-xs text-slate-400">{user.email || user.id.slice(0, 12)}</p>
-                        </div>
+                        <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-black text-xs text-slate-400">{u.display_name?.[0] || '?'}</div>
+                        <div><p className="font-bold text-slate-800">{u.display_name || 'No Name'}</p><p className="text-[10px] text-slate-400">{u.email || u.id.slice(0, 10)}</p></div>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <span className={`text-xs font-black px-2.5 py-1 rounded-full uppercase tracking-wide ${user.role === 'admin' ? 'bg-maroon-100 text-maroon-800' :
-                        user.role === 'teacher' ? 'bg-purple-100 text-purple-700' :
-                          'bg-slate-100 text-slate-500'
-                        }`}>{user.role || 'student'}</span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-500">{format(new Date(user.created_at), 'MMM d, yyyy')}</td>
+                    <td className="px-6 py-4"><span className="text-[10px] font-black uppercase px-2 py-1 bg-slate-100 rounded-md text-slate-500">{u.role || 'student'}</span></td>
                     <td className="px-6 py-4 text-right">
-                      <select
-                        value={user.role || 'student'}
-                        onChange={e => handleSetRole(user.id, e.target.value)}
-                        className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 outline-none cursor-pointer hover:border-maroon-800/30 transition-colors"
-                      >
-                        <option value="student">Student</option>
-                        <option value="teacher">Teacher</option>
-                        <option value="admin">Admin</option>
+                      <select value={u.role || 'student'} onChange={e => handleSetRole(u.id, e.target.value)} className="text-[10px] font-bold border border-slate-200 rounded p-1 bg-white outline-none">
+                        <option value="student">Student</option><option value="teacher">Teacher</option><option value="admin">Admin</option>
                       </select>
                     </td>
                   </tr>
@@ -564,232 +571,141 @@ function App() {
 
         {/* ── News ── */}
         {activeTab === 'news' && (
-          <>
+          <div className="space-y-6">
+            <button onClick={() => { setEditingId(null); setForm({ title: '', content: '', excerpt: '', image_url: '' }); setShowForm(true); }} className="bg-maroon-800 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-maroon-800/20"><Plus size={18} /> New Article</button>
             {showForm && (
-              <section className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-8">
-                <h2 className="text-xl font-bold mb-6 text-slate-800">{editingId ? 'Edit Article' : 'Create New Article'}</h2>
-                <div className="grid gap-5">
-                  <input type="text" placeholder="Article Title" className="w-full p-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-maroon-800/20" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
-                  <input type="text" placeholder="Image URL" className="w-full p-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-maroon-800/20" value={form.image_url} onChange={e => setForm({ ...form, image_url: e.target.value })} />
-                  <textarea placeholder="Excerpt (short summary)" className="w-full p-3 rounded-lg border border-slate-200 h-20 focus:outline-none focus:ring-2 focus:ring-maroon-800/20" value={form.excerpt} onChange={e => setForm({ ...form, excerpt: e.target.value })} />
-                  <textarea placeholder="Full Content (HTML supported)" className="w-full p-3 rounded-lg border border-slate-200 h-64 focus:outline-none focus:ring-2 focus:ring-maroon-800/20 font-mono text-sm" value={form.content} onChange={e => setForm({ ...form, content: e.target.value })} />
-                  <div className="flex justify-end gap-3 pt-2">
-                    <button onClick={() => { setShowForm(false); setEditingId(null); setForm({ title: '', content: '', excerpt: '', image_url: '' }); }} className="px-5 py-2.5 rounded-lg font-bold text-slate-500 hover:bg-slate-100 transition-colors flex items-center gap-2">
-                      <X size={18} /> Cancel
-                    </button>
-                    <button onClick={handleSaveNews} className="px-6 py-2.5 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition-colors flex items-center gap-2">
-                      <Save size={18} /> {editingId ? 'Update' : 'Publish'}
-                    </button>
-                  </div>
-                </div>
-              </section>
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                <input placeholder="Title" className="w-full p-4 bg-slate-50 border-none rounded-xl" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
+                <textarea placeholder="Content" className="w-full p-4 bg-slate-50 border-none rounded-xl h-48" value={form.content} onChange={e => setForm({ ...form, content: e.target.value })} />
+                <div className="flex justify-end gap-3 pt-4"><button onClick={() => setShowForm(false)} className="px-4 py-2 font-bold text-slate-400">Cancel</button><button onClick={handleSaveNews} className="bg-maroon-800 text-white px-6 py-2 rounded-xl font-bold">Save</button></div>
+              </div>
             )}
-
-            <div className="grid gap-6">
-              {news.length === 0 ? (
-                <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-300 text-slate-400">No articles found. Start by creating one!</div>
-              ) : news.map(article => (
-                <div key={article.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 flex gap-6 hover:shadow-md transition-shadow">
-                  {article.image_url
-                    ? <img src={article.image_url} alt="" className="w-40 h-28 object-cover rounded-xl bg-slate-100" />
-                    : <div className="w-40 h-28 bg-slate-50 rounded-xl flex items-center justify-center border border-slate-100"><Newspaper size={32} className="text-slate-200" /></div>
-                  }
-                  <div className="flex-1">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="text-lg font-bold text-slate-900 leading-tight">{article.title}</h3>
-                        <p className="text-sm text-slate-400 mt-1">{format(new Date(article.created_at!), 'MMM d, yyyy • HH:mm')}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => startEditNews(article)} className="p-2 text-slate-400 hover:text-maroon-800 hover:bg-maroon-50 rounded-lg transition-colors"><Edit3 size={18} /></button>
-                        <button onClick={() => handleDeleteNews(article.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={18} /></button>
-                      </div>
-                    </div>
-                    <p className="text-slate-500 text-sm mt-3 line-clamp-2">{article.excerpt || 'No summary provided.'}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-
-        {/* ── Micro Learning ── */}
-        {activeTab === 'micro_learning' && (
-          <>
-            {showMLForm && (
-              <section className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-8">
-                <h2 className="text-xl font-bold mb-6 text-slate-800">{editingMLId ? 'Edit Lesson' : 'Create Micro Learning Lesson'}</h2>
-                <div className="grid gap-5">
-                  <div className="grid grid-cols-3 gap-5">
-                    <input type="text" placeholder="Lesson Title" className="col-span-2 w-full p-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-maroon-800/20" value={mlForm.title} onChange={e => setMLForm({ ...mlForm, title: e.target.value })} />
-                    <input type="number" placeholder="Price (M-points)" className="w-full p-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-maroon-800/20" value={mlForm.price_mpoints} onChange={e => setMLForm({ ...mlForm, price_mpoints: parseInt(e.target.value) || 0 })} />
-                  </div>
-                  <input type="text" placeholder="Category (e.g., Mind, Wisdom)" className="w-full p-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-maroon-800/20" value={mlForm.category} onChange={e => setMLForm({ ...mlForm, category: e.target.value })} />
-                  <input type="text" placeholder="Image URL" className="w-full p-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-maroon-800/20" value={mlForm.image_url} onChange={e => setMLForm({ ...mlForm, image_url: e.target.value })} />
-                  <textarea placeholder="Teaser Summary (appears on cards)" className="w-full p-3 rounded-lg border border-slate-200 h-20 focus:outline-none focus:ring-2 focus:ring-maroon-800/20" value={mlForm.summary} onChange={e => setMLForm({ ...mlForm, summary: e.target.value })} />
-                  <textarea placeholder="Main content (Markdown/HTML supported)" className="w-full p-3 rounded-lg border border-slate-200 h-64 focus:outline-none focus:ring-2 focus:ring-maroon-800/20 font-mono text-sm" value={mlForm.content} onChange={e => setMLForm({ ...mlForm, content: e.target.value })} />
-                  <div className="flex items-center gap-3">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={mlForm.is_published} onChange={e => setMLForm({ ...mlForm, is_published: e.target.checked })} className="w-4 h-4 rounded text-maroon-800 focus:ring-maroon-800/20" />
-                      <span className="text-sm font-bold text-slate-600">Published</span>
-                    </label>
-                  </div>
-                  <div className="flex justify-end gap-3 pt-2">
-                    <button onClick={() => { setShowMLForm(false); setEditingMLId(null); setMLForm({ title: '', content: '', summary: '', image_url: '', category: 'General', is_published: true, price_mpoints: 0 }); }} className="px-5 py-2.5 rounded-lg font-bold text-slate-500 hover:bg-slate-100 transition-colors flex items-center gap-2">
-                      <X size={18} /> Cancel
-                    </button>
-                    <button onClick={handleSaveML} className="px-6 py-2.5 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition-colors flex items-center gap-2">
-                      <Save size={18} /> {editingMLId ? 'Update' : 'Publish'}
-                    </button>
-                  </div>
-                </div>
-              </section>
-            )}
-
-            <div className="grid gap-6">
-              {mlPosts.length === 0 ? (
-                <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-300 text-slate-400">No lessons found. Enlighten the students with a new one!</div>
-              ) : mlPosts.map(post => (
-                <div key={post.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 flex gap-6 hover:shadow-md transition-shadow">
-                  {post.image_url
-                    ? <img src={post.image_url} alt="" className="w-40 h-28 object-cover rounded-xl bg-slate-100" />
-                    : <div className="w-40 h-28 bg-slate-50 rounded-xl flex items-center justify-center border border-slate-100"><BookOpen size={32} className="text-slate-200" /></div>
-                  }
-                  <div className="flex-1">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 text-[10px] font-black uppercase tracking-wider">{post.category}</span>
-                          <span className={clsx("px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider", post.price_mpoints > 0 ? "bg-amber-100 text-amber-900" : "bg-emerald-50 text-emerald-700")}>
-                            {post.price_mpoints > 0 ? `${post.price_mpoints} M-points` : 'Free'}
-                          </span>
-                          {!post.is_published && <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-wider">Draft</span>}
-                        </div>
-                        <h3 className="text-lg font-bold text-slate-900 leading-tight">{post.title}</h3>
-                      </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => startEditML(post)} className="p-2 text-slate-400 hover:text-maroon-800 hover:bg-maroon-50 rounded-lg transition-colors"><Edit3 size={18} /></button>
-                        <button onClick={() => handleDeleteML(post.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={18} /></button>
-                      </div>
-                    </div>
-                    <p className="text-slate-500 text-sm mt-3 line-clamp-2">{post.summary || 'No summary provided.'}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-
-        {/* ── Notifications ── */}
-        {activeTab === 'notifications' && (
-          <>
-            {showNotifForm && (
-              <section className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-8">
-                <h2 className="text-xl font-bold mb-6 text-slate-800">{editingNotifId ? 'Edit Notification' : 'Compose Announcement'}</h2>
-                <div className="grid gap-5">
-                  <div className="grid grid-cols-2 gap-5">
-                    <input type="text" placeholder="Notification Title" className="w-full p-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-maroon-800/20" value={notifForm.title} onChange={e => setNotifForm({ ...notifForm, title: e.target.value })} />
-                    <div className="flex items-center gap-2 bg-slate-50 px-3 rounded-lg border border-slate-200">
-                      <Calendar size={18} className="text-slate-400" />
-                      <input type="datetime-local" className="bg-transparent w-full p-2 outline-none text-sm font-medium text-slate-700" value={notifForm.scheduled_at} onChange={e => setNotifForm({ ...notifForm, scheduled_at: e.target.value })} />
-                    </div>
-                  </div>
-                  <textarea placeholder="Notification message..." className="w-full p-3 rounded-lg border border-slate-200 h-32 focus:outline-none focus:ring-2 focus:ring-maroon-800/20" value={notifForm.content} onChange={e => setNotifForm({ ...notifForm, content: e.target.value })} />
-                  <div className="flex justify-end gap-3 pt-2">
-                    <button onClick={() => { setShowNotifForm(false); setEditingNotifId(null); setNotifForm({ title: '', content: '', scheduled_at: format(new Date(), "yyyy-MM-dd'T'HH:mm"), type: 'announcement' }); }} className="px-5 py-2.5 rounded-lg font-bold text-slate-500 hover:bg-slate-100 transition-colors flex items-center gap-2">
-                      <X size={18} /> Cancel
-                    </button>
-                    <button onClick={handleSaveNotif} className="px-6 py-2.5 rounded-lg bg-maroon-800 text-white font-bold hover:bg-maroon-900 transition-colors flex items-center gap-2 shadow-lg shadow-maroon-800/20">
-                      <Save size={18} /> {editingNotifId ? 'Update' : 'Schedule'}
-                    </button>
-                  </div>
-                </div>
-              </section>
-            )}
-
             <div className="grid gap-4">
-              {notifications.length === 0 ? (
-                <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-300 text-slate-400">No notifications scheduled.</div>
-              ) : notifications.map(notif => {
-                const isFuture = new Date(notif.scheduled_at) > new Date();
-                return (
-                  <div key={notif.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 flex items-center gap-5 hover:border-slate-300 transition-all">
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${notif.is_sent ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
-                      <Bell size={24} />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3">
-                        <h3 className="text-lg font-bold text-slate-900">{notif.title}</h3>
-                        <span className={`text-[10px] uppercase font-black px-2 py-0.5 rounded-md ${notif.is_sent ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
-                          {notif.is_sent ? 'Sent' : 'Scheduled'}
-                        </span>
-                      </div>
-                      <p className="text-slate-500 text-sm mt-1">{notif.content}</p>
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400 mt-2">
-                        <Calendar size={14} />
-                        {format(new Date(notif.scheduled_at), 'MMM d, yyyy • HH:mm')}
-                        {isFuture && <span className="text-amber-500 ml-1">(Upcoming)</span>}
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => startEditNotif(notif)} className="p-2 text-slate-400 hover:text-maroon-800 hover:bg-maroon-50 rounded-lg transition-colors"><Edit3 size={18} /></button>
-                      <button onClick={() => handleDeleteNotif(notif.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={18} /></button>
-                    </div>
-                  </div>
-                );
-              })}
+              {news.map(n => (
+                <div key={n.id} className="bg-white p-4 rounded-2xl border border-slate-100 flex justify-between items-center shadow-sm">
+                  <div><h3 className="font-bold text-slate-800">{n.title}</h3><p className="text-xs text-slate-400">{format(new Date(n.created_at!), 'MMM d, yyyy')}</p></div>
+                  <div className="flex gap-2"><button onClick={() => startEditNews(n)} className="p-2 text-slate-300 hover:text-maroon-800"><Edit3 size={18} /></button><button onClick={() => handleDeleteNews(n.id)} className="p-2 text-slate-300 hover:text-red-500"><Trash2 size={18} /></button></div>
+                </div>
+              ))}
             </div>
-          </>
+          </div>
         )}
 
-        {/* ── Moderation ── */}
+        {/* ── Moderation & Practices ── */}
         {activeTab === 'moderation' && (
-          <div className="space-y-8">
-            <div className="flex gap-4">
-              <button onClick={() => setModSubTab('practices')} className={`px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all ${modSubTab === 'practices' ? 'bg-maroon-800 text-white shadow-lg shadow-maroon-800/20' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'}`}>
-                <Newspaper size={18} /> Practices Audit
-              </button>
-              <button onClick={() => setModSubTab('logs')} className={`px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all ${modSubTab === 'logs' ? 'bg-maroon-800 text-white shadow-lg shadow-maroon-800/20' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'}`}>
-                <ShieldCheck size={18} /> Completion Logs
-              </button>
+          <div className="space-y-6">
+            <div className="flex gap-4 p-1 bg-slate-200/50 rounded-2xl w-fit">
+              {['practices', 'manage', 'logs'].map(t => (
+                <button key={t} onClick={() => setModSubTab(t as any)} className={twMerge(
+                  "px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
+                  modSubTab === t ? "bg-white text-maroon-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                )}>{t}</button>
+              ))}
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+            {modSubTab === 'manage' && (
+              <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
+                <div className="flex justify-between items-center mb-8">
+                  <h2 className="text-xl font-black text-slate-800">{editingId ? 'Edit Practice' : 'Create Practice Entry'}</h2>
+                  {showPracticeForm && <button onClick={() => setShowPracticeForm(false)} className="text-slate-300 hover:text-slate-500"><X /></button>}
+                </div>
+
+                {!showPracticeForm ? (
+                  <button onClick={() => { setShowPracticeForm(true); setEditingPracticeId(null); setPracticeForm({ title: '', category: AP_CATEGORIES[0], description: '', library_group: 'AP', is_public: true, is_active: true, target_type: 'duration', daily_target: 20, target_unit: 'minutes' }); }} className="w-full py-10 border-2 border-dashed border-slate-200 rounded-3xl text-slate-400 font-bold hover:border-maroon-800/30 hover:text-maroon-800 transition-all flex flex-col items-center justify-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-300"><Plus size={32} /></div>
+                    Create a new practice template
+                  </button>
+                ) : (
+                  <div className="grid md:grid-cols-2 gap-8">
+                    <div className="space-y-6">
+                      <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Practice Title</label>
+                        <input className="w-full p-4 bg-slate-50 border-none rounded-2xl font-bold focus:ring-2 focus:ring-maroon-800/10" value={practiceForm.title} onChange={e => setPracticeForm({ ...practiceForm, title: e.target.value })} /></div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Group</label>
+                          <div className="flex gap-2 p-1 bg-slate-50 rounded-xl">
+                            {['AP', 'AH'].map(g => (
+                              <button key={g} onClick={() => setPracticeForm({ ...practiceForm, library_group: g, category: g === 'AP' ? AP_CATEGORIES[0] : AH_CATEGORIES[0] })} className={twMerge("flex-1 py-2 rounded-lg text-xs font-black transition-all", practiceForm.library_group === g ? "bg-white shadow text-maroon-800" : "text-slate-400")}>{g}</button>
+                            ))}
+                          </div></div>
+                        <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Category</label>
+                          <select className="w-full p-4 bg-slate-50 border-none rounded-2xl font-bold text-xs" value={practiceForm.category} onChange={e => setPracticeForm({ ...practiceForm, category: e.target.value })}>
+                            {(practiceForm.library_group === 'AP' ? AP_CATEGORIES : AH_CATEGORIES).map(c => <option key={c} value={c}>{c}</option>)}
+                          </select></div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Target Value</label><input type="number" className="w-full p-4 bg-slate-50 border-none rounded-2xl" value={practiceForm.daily_target} onChange={e => setPracticeForm({ ...practiceForm, daily_target: parseInt(e.target.value) })} /></div>
+                        <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Unit</label><input className="w-full p-4 bg-slate-50 border-none rounded-2xl" value={practiceForm.target_unit} onChange={e => setPracticeForm({ ...practiceForm, target_unit: e.target.value })} /></div>
+                      </div>
+                      <div className="flex gap-6 pt-4"><label className="flex items-center gap-3"><input type="checkbox" checked={practiceForm.is_public} onChange={e => setPracticeForm({ ...practiceForm, is_public: e.target.checked })} /> <span className="text-xs font-bold text-slate-600">Public</span></label><label className="flex items-center gap-3"><input type="checkbox" checked={practiceForm.is_active} onChange={e => setPracticeForm({ ...practiceForm, is_active: e.target.checked })} /> <span className="text-xs font-bold text-slate-600">Active</span></label></div>
+                    </div>
+
+                    <div className="md:col-span-2 border-t border-slate-50 pt-8 flex justify-end gap-3"><button onClick={() => setShowPracticeForm(false)} className="px-6 py-2.5 font-bold text-slate-400">Cancel</button><button onClick={handleSavePractice} className="bg-maroon-800 text-white px-8 py-2.5 rounded-2xl font-black text-sm shadow-xl shadow-maroon-800/20">Save Practice</button></div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
               <table className="w-full text-left">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-100">
-                    <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">{modSubTab === 'practices' ? 'Program / Author' : 'Practice / Practitioner'}</th>
-                    <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">Date</th>
-                    <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">Actions</th>
-                  </tr>
-                </thead>
+                <thead className="bg-slate-50 border-b border-slate-100"><tr className="text-[9px] font-black uppercase tracking-widest text-slate-400"><th className="px-8 py-5">Item</th><th className="px-8 py-5 text-center">Group/Cat</th><th className="px-8 py-5 text-right">Actions</th></tr></thead>
                 <tbody className="divide-y divide-slate-50">
-                  {modSubTab === 'practices' ? allPractices.map(item => (
-                    <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-8 py-5">
-                        <p className="font-extrabold text-slate-800">{item.title}</p>
-                        <p className="text-xs font-bold text-slate-400 uppercase mt-0.5">By {item.profiles?.display_name || 'Anonymous'}</p>
-                      </td>
-                      <td className="px-8 py-5">
-                        <p className="text-sm font-bold text-slate-500">{format(new Date(item.created_at), 'MMM d, yyyy')}</p>
-                        <p className="text-[10px] font-black text-slate-300">ID: {item.id.slice(0, 8)}</p>
-                      </td>
-                      <td className="px-8 py-5 text-right">
-                        <button onClick={() => handleDeletePractice(item.id)} className="p-3 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all" title="Delete"><Trash2 size={20} /></button>
-                      </td>
+                  {modSubTab !== 'logs' ? allPractices.map(p => (
+                    <tr key={p.id} className="hover:bg-slate-50/30">
+                      <td className="px-8 py-5"><div><p className="font-extrabold text-slate-800">{p.title}</p><p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Creator: {p.profiles?.display_name || 'System'}</p></div></td>
+                      <td className="px-8 py-5 text-center"><div className="inline-block px-2.5 py-1 rounded bg-slate-100 text-[10px] font-black text-slate-600 mb-1">{p.library_group}</div><p className="text-[9px] font-bold text-slate-400 uppercase">{p.category}</p></td>
+                      <td className="px-8 py-5 text-right"><div className="flex justify-end gap-1"><button onClick={() => startEditPractice(p)} className="p-2 text-slate-300 hover:text-maroon-800"><Edit3 size={18} /></button><button onClick={() => handleDeletePractice(p.id)} className="p-2 text-slate-300 hover:text-red-500"><Trash2 size={18} /></button></div></td>
                     </tr>
-                  )) : allLogs.map(item => (
-                    <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-8 py-5">
-                        <p className="font-extrabold text-slate-800">{item.practices?.title || 'Unknown practice'}</p>
-                        <p className="text-xs font-bold text-maroon-800 uppercase mt-0.5">Completed by {item.profiles?.display_name || 'Sangha Member'}</p>
-                      </td>
-                      <td className="px-8 py-5">
-                        <p className="text-sm font-bold text-slate-500">{format(new Date(item.created_at), 'MMM d, yyyy • HH:mm')}</p>
-                      </td>
-                      <td className="px-8 py-5 text-right">
-                        <button onClick={() => handleDeleteLog(item.id)} className="p-3 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all" title="Delete"><Trash2 size={20} /></button>
-                      </td>
+                  )) : allLogs.map(l => (
+                    <tr key={l.id} className="hover:bg-slate-50/30"><td className="px-8 py-5"><div><p className="font-bold text-slate-800">{l.practices?.title}</p><p className="text-[10px] text-maroon-800 font-black uppercase">{l.profiles?.display_name}</p></div></td><td className="px-8 py-5 text-center text-xs text-slate-400">{format(new Date(l.created_at), 'MMM d • HH:mm')}</td><td className="px-8 py-5 text-right"><button onClick={() => handleDeleteLog(l.id)} className="p-3 text-slate-300 hover:text-red-500"><Trash2 size={20} /></button></td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── Realms ── */}
+        {activeTab === 'realms' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {realms.map(r => (
+              <div key={r.id} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 relative group">
+                <div className="flex justify-between mb-4">
+                  <div className="w-12 h-12 rounded-2xl bg-maroon-50 text-maroon-800 flex items-center justify-center font-black">#{r.id}</div>
+                  <button onClick={() => startEditRealm(r)} className="p-2 text-slate-300 hover:text-maroon-800"><Edit3 size={18} /></button>
+                </div>
+                <h3 className="text-lg font-black text-slate-800 mb-2">{r.name}</h3>
+                <p className="text-xs text-slate-500 line-clamp-2 mb-6">{r.short_desc}</p>
+                <div className="grid grid-cols-6 gap-1 bg-slate-50 p-2 rounded-xl">
+                  {[1, 2, 3, 4, 5, 6].map(d => <div key={d} className="flex flex-col items-center"><span className="text-[8px] font-black text-slate-300">{d}</span><span className="text-[10px] font-bold text-slate-700">{(r as any)[`dice_${d}`]}</span></div>)}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── Survey ── */}
+        {activeTab === 'survey' && (
+          <div className="space-y-6">
+            <button onClick={() => { setEditingQuestionId(null); setSurveyForm({ text: '', is_buddhist_only: false, order_index: surveyQuestions.length + 1, is_active: true }); setShowSurveyForm(true); }} className="bg-maroon-800 text-white px-8 py-2.5 rounded-2xl font-black text-xs flex items-center gap-2 shadow-xl shadow-maroon-800/10"><Plus size={18} /> New Question</button>
+            {showSurveyForm && (
+              <div className="bg-white p-8 rounded-3xl border border-slate-200 space-y-6">
+                <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Question Content</label><textarea className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold" value={surveyForm.text} onChange={e => setSurveyForm({ ...surveyForm, text: e.target.value })} /></div>
+                <div className="flex justify-end gap-3"><button onClick={() => setShowSurveyForm(false)} className="px-6 py-2 font-bold text-slate-400">Cancel</button><button onClick={handleSaveSurveyQuestion} className="bg-emerald-600 text-white px-8 py-2 rounded-2xl font-black text-xs">Save Question</button></div>
+              </div>
+            )}
+            <div className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm">
+              <table className="w-full text-left">
+                <thead className="bg-slate-50"><tr className="text-[9px] font-black uppercase text-slate-400 tracking-widest"><th className="px-8 py-5">Idx</th><th className="px-8 py-5">Question</th><th className="px-8 py-5 text-right">Action</th></tr></thead>
+                <tbody className="divide-y divide-slate-50">
+                  {surveyQuestions.map(q => (
+                    <tr key={q.id} className="hover:bg-slate-50/30">
+                      <td className="px-8 py-5 font-black text-slate-300">{q.order_index}</td>
+                      <td className="px-8 py-5 font-bold text-slate-700 text-sm">{q.text}</td>
+                      <td className="px-8 py-5 text-right flex justify-end gap-1"><button onClick={() => startEditSurveyQuestion(q)} className="p-2 text-slate-300 hover:text-maroon-800"><Edit3 size={16} /></button><button onClick={() => handleDeleteSurveyQuestion(q.id)} className="p-2 text-slate-300 hover:text-red-500"><Trash2 size={16} /></button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -800,165 +716,33 @@ function App() {
 
         {/* ── Settings ── */}
         {activeTab === 'settings' && (
-          <div className="grid gap-10">
+          <div className="max-w-3xl space-y-10">
             {Array.from(new Set(configs.map(c => c.category))).map(cat => (
               <section key={cat}>
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 bg-maroon-50 rounded-lg flex items-center justify-center text-maroon-800">
-                    <Sliders size={20} />
-                  </div>
-                  <h2 className="text-xl font-black text-slate-900 uppercase tracking-widest">{cat} Settings</h2>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {configs.filter(c => c.category === cat).map(config => (
-                    <div key={config.key} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between">
-                      <div>
-                        <h3 className="font-bold text-slate-800">{config.label}</h3>
-                        <p className="text-xs text-slate-400 mt-1 mb-4">{config.description}</p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="number"
-                          className="flex-1 bg-slate-50 border border-slate-200 rounded-lg p-2 font-black text-slate-700 outline-none focus:ring-2 focus:ring-maroon-800/10"
-                          defaultValue={config.value}
-                          onBlur={e => {
-                            const val = parseFloat(e.target.value);
-                            if (val !== config.value) handleUpdateConfig(config.key, val);
-                          }}
-                        />
-                        {savingConfig === config.key
-                          ? <div className="w-6 h-6 border-2 border-maroon-800 border-t-transparent rounded-full animate-spin" />
-                          : <Save size={18} className="text-slate-200" />
-                        }
-                      </div>
+                <h2 className="text-xs font-black uppercase tracking-[0.2em] text-slate-300 mb-6 flex items-center gap-3">
+                  <div className="h-[1px] bg-slate-200 flex-1" /> {cat} Settings <div className="h-[1px] bg-slate-200 flex-1" />
+                </h2>
+                <div className="grid gap-4">
+                  {configs.filter(c => c.category === cat).map(cfg => (
+                    <div key={cfg.key} className="bg-white p-5 rounded-2xl border border-slate-100 flex justify-between items-center shadow-sm">
+                      <div><p className="font-bold text-slate-800">{cfg.label}</p><p className="text-[10px] text-slate-400 font-medium">{cfg.description}</p></div>
+                      <input type="number" defaultValue={cfg.value} onBlur={e => handleUpdateConfig(cfg.key, parseFloat(e.target.value))} className="w-20 p-2 bg-slate-50 rounded-lg text-center font-black text-maroon-800 outline-none focus:ring-2 focus:ring-maroon-800/10" />
                     </div>
                   ))}
                 </div>
               </section>
             ))}
-            {configs.length === 0 && (
-              <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200 text-slate-400">
-                No configurations found. Add rows to the <code className="text-xs bg-slate-100 px-1.5 py-0.5 rounded">app_configs</code> table.
-              </div>
-            )}
           </div>
         )}
-
-        {/* ── Realms ── */}
-        {activeTab === 'realms' && (
-          <div className="grid gap-6">
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex justify-between items-center">
-              <div>
-                <h3 className="font-bold text-slate-800">Rebirth Realms Database</h3>
-                <p className="text-slate-500 text-sm mt-1">Manage the 104 realms available in the Rebirth Game.</p>
-              </div>
-            </div>
-
-            {realms.length === 0 ? (
-              <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-300 text-slate-400">
-                <Dices className="mx-auto mb-4 text-slate-300" size={48} />
-                <p>Database is empty. Please run the <code className="text-xs bg-slate-100 px-1 py-0.5 rounded">20260224_ADD_REBIRTH_GAME.sql</code> migration in Supabase SQL Editor to populate.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {realms.map(realm => (
-                  <div key={realm.id} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex gap-4">
-                    {realm.image_url ? (
-                      <img src={`https://fktxnyltyehpbouqfuxv.supabase.co/storage/v1/object/public/images/rebird/${realm.image_url}`} alt={realm.name} className="w-24 h-24 rounded-lg object-cover bg-slate-100" />
-                    ) : (
-                      <div className="w-24 h-24 rounded-lg bg-slate-100 flex items-center justify-center"><Dices className="text-slate-300" /></div>
-                    )}
-
-                    <div className="flex-1">
-                      {editingRealmId === realm.id ? (
-                        <div className="space-y-3">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-black text-slate-400 w-8">{realm.id}</span>
-                            <input value={realmForm.name || ''} onChange={e => setRealmForm({ ...realmForm, name: e.target.value })} className="flex-1 p-1 border rounded text-sm font-bold text-slate-800" placeholder="Name" />
-                          </div>
-                          <textarea value={realmForm.short_desc || ''} onChange={e => setRealmForm({ ...realmForm, short_desc: e.target.value })} className="w-full p-2 border rounded text-xs text-slate-600 h-16" placeholder="Short Desc" />
-                          <textarea value={realmForm.description || ''} onChange={e => setRealmForm({ ...realmForm, description: e.target.value })} className="w-full p-2 border rounded text-xs text-slate-600 h-32" placeholder="Full Description (HTML/Markdown supported)" />
-                          <input value={realmForm.image_url || ''} onChange={e => setRealmForm({ ...realmForm, image_url: e.target.value })} className="w-full p-1 border rounded text-xs text-slate-600" placeholder="Image filename (e.g. Realm_01.jpg)" />
-
-                          <div className="grid grid-cols-3 gap-2 mt-2">
-                            {Array.from({ length: 6 }, (_, i) => i + 1).map(d => (
-                              <div key={d} className="flex items-center gap-1">
-                                <Dices size={12} className="text-slate-400" />
-                                <span className="text-[10px] font-bold text-slate-500">{d}:</span>
-                                <input type="number" value={(realmForm as any)[`dice_${d}`] || 0} onChange={e => setRealmForm({ ...realmForm, [`dice_${d}`]: parseInt(e.target.value) })} className="w-10 p-1 border rounded text-xs text-center" />
-                              </div>
-                            ))}
-                          </div>
-
-                          <div className="flex items-center gap-2 mt-2">
-                            <span className="text-xs font-bold text-slate-500">Life Days:</span>
-                            <input type="number" value={realmForm.life_days || 0} onChange={e => setRealmForm({ ...realmForm, life_days: parseInt(e.target.value) })} className="w-16 p-1 border rounded text-xs text-center" />
-                          </div>
-
-                          <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                            <div className="flex items-center gap-2 mb-2">
-                              <BookOpen size={14} className="text-maroon-800" />
-                              <span className="text-xs font-black text-slate-800 uppercase tracking-wider">Mandatory Practices</span>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              {publicPractices.map(p => {
-                                const isSelected = selectedPractices.includes(p.id);
-                                return (
-                                  <button
-                                    key={p.id}
-                                    type="button"
-                                    onClick={() => togglePractice(p.id)}
-                                    className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all flex items-center gap-1.5 border-2 ${isSelected
-                                      ? 'bg-maroon-800 text-white border-maroon-800 shadow-md transform scale-105'
-                                      : 'bg-white text-slate-400 border-slate-100 hover:border-maroon-800/20 hover:text-maroon-800'
-                                      }`}
-                                  >
-                                    {isSelected && <Check size={12} strokeWidth={3} />}
-                                    {p.title}
-                                  </button>
-                                );
-                              })}
-                              {publicPractices.length === 0 && <p className="text-[10px] text-slate-400 italic">No public practices available.</p>}
-                            </div>
-                          </div>
-
-                          <div className="flex gap-2 pt-2">
-                            <button onClick={handleSaveRealm} className="flex-1 bg-maroon-800 text-white rounded text-xs font-bold py-1.5 hover:bg-maroon-900 transition-colors">Save</button>
-                            <button onClick={() => setEditingRealmId(null)} className="px-3 bg-slate-100 text-slate-600 rounded text-xs font-bold hover:bg-slate-200 transition-colors">Cancel</button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div>
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-black mr-2">#{realm.id}</span>
-                              <span className="font-bold text-slate-800">{realm.name}</span>
-                            </div>
-                            <button onClick={() => startEditRealm(realm)} className="p-1.5 text-slate-400 hover:text-maroon-800 hover:bg-maroon-50 rounded-lg transition-colors"><Edit3 size={14} /></button>
-                          </div>
-                          <p className="text-xs text-slate-500 mt-1 mb-3 line-clamp-2">{realm.short_desc}</p>
-
-                          <div className="grid grid-cols-6 gap-1 bg-slate-50 p-2 rounded-lg mt-auto">
-                            {Array.from({ length: 6 }, (_, i) => i + 1).map(d => (
-                              <div key={d} className="flex flex-col items-center">
-                                <span className="text-[9px] font-black text-slate-400">{d}</span>
-                                <span className="text-xs font-bold text-slate-700">{(realm as any)[`dice_${d}`]}</span>
-                              </div>
-                            ))}
-                          </div>
-
-                          {/* We could fetch and show linked practices here too if we update the Realm type */}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
       </main>
+
+      {/* Floating Notif (Optional) */}
+      <footer className="fixed bottom-6 right-6 z-[50]">
+        <div className="bg-slate-900/90 text-white px-5 py-3 rounded-2xl shadow-2xl backdrop-blur flex items-center gap-4">
+          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Live Sync Enabled</span>
+        </div>
+      </footer>
     </div>
   );
 }
