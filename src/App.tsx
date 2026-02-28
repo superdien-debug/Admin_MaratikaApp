@@ -6,11 +6,12 @@ import { notificationAdminService, type AppNotification } from './services/notif
 import { microLearningAdminService, type MicroLearningPost } from './services/microLearningAdminService';
 import { rebirthAdminService, type Realm } from './services/rebirthAdminService';
 import { surveyAdminService, type SurveyQuestion } from './services/surveyAdminService';
-import { Plus, Trash2, Edit3, Save, X, Newspaper, LogOut, Lock, Bell, Calendar, Settings, Sliders, Users, LayoutDashboard, ShieldCheck, ShieldAlert, BookOpen, Dices, Check, HelpCircle } from 'lucide-react';
+import { yangtiAdminService, type YangtiStage } from './services/yangtiAdminService';
+import { Plus, Trash2, Edit3, Save, X, Newspaper, LogOut, Lock, Bell, Calendar, Settings, Sliders, Users, LayoutDashboard, ShieldCheck, ShieldAlert, BookOpen, Dices, Check, HelpCircle, Compass } from 'lucide-react';
 import { format } from 'date-fns';
 import { twMerge } from 'tailwind-merge';
 
-type Tab = 'news' | 'notifications' | 'settings' | 'users' | 'dashboard' | 'moderation' | 'micro_learning' | 'realms' | 'survey';
+type Tab = 'news' | 'notifications' | 'settings' | 'users' | 'dashboard' | 'moderation' | 'micro_learning' | 'realms' | 'survey' | 'yangti';
 
 type AppConfig = {
   key: string;
@@ -104,6 +105,11 @@ function App() {
     is_active: true
   });
 
+  // Yangti state
+  const [yangtiStages, setYangtiStages] = useState<YangtiStage[]>([]);
+  const [editingYangtiId, setEditingYangtiId] = useState<number | null>(null);
+  const [yangtiForm, setYangtiForm] = useState<Partial<YangtiStage>>({});
+
   // Auth inputs
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -154,7 +160,8 @@ function App() {
       loadStats(),
       loadRealms(),
       loadPublicPractices(),
-      loadSurveyQuestions()
+      loadSurveyQuestions(),
+      loadYangtiStages()
     ]);
     setIsDataLoading(false);
   };
@@ -232,6 +239,13 @@ function App() {
     try {
       const data = await surveyAdminService.getAll();
       setSurveyQuestions(data);
+    } catch (err) { console.error(err); }
+  };
+
+  const loadYangtiStages = async () => {
+    try {
+      const data = await yangtiAdminService.getAll();
+      setYangtiStages(data);
     } catch (err) { console.error(err); }
   };
 
@@ -439,6 +453,29 @@ function App() {
     setShowSurveyForm(true);
   };
 
+  // Yangti Handlers
+  const startEditYangti = (stage: YangtiStage) => {
+    setEditingYangtiId(stage.stage_number);
+    setYangtiForm(stage);
+  };
+
+  const handleSaveYangti = async () => {
+    if (!editingYangtiId) return;
+    try {
+      await yangtiAdminService.update(editingYangtiId, {
+        title: yangtiForm.title,
+        description: yangtiForm.description,
+        metric_goal: yangtiForm.metric_goal
+      });
+      setEditingYangtiId(null);
+      setYangtiForm({});
+      loadYangtiStages();
+      alert('Stage updated successfully!');
+    } catch (err) {
+      alert('Failed to update stage');
+    }
+  };
+
   // ── Render ──
   if (loading) {
     return (
@@ -492,6 +529,7 @@ function App() {
     { id: 'notifications', label: 'Notifs', icon: <Bell size={18} /> },
     { id: 'moderation', label: 'Moderation', icon: <ShieldCheck size={18} /> },
     { id: 'survey', label: 'Survey', icon: <HelpCircle size={18} /> },
+    { id: 'yangti', label: 'Yangti Nakpo', icon: <Compass size={18} /> },
     { id: 'settings', label: 'Settings', icon: <Settings size={18} /> },
   ];
 
@@ -706,6 +744,66 @@ function App() {
                       <td className="px-8 py-5 font-black text-slate-300">{q.order_index}</td>
                       <td className="px-8 py-5 font-bold text-slate-700 text-sm">{q.text}</td>
                       <td className="px-8 py-5 text-right flex justify-end gap-1"><button onClick={() => startEditSurveyQuestion(q)} className="p-2 text-slate-300 hover:text-maroon-800"><Edit3 size={16} /></button><button onClick={() => handleDeleteSurveyQuestion(q.id)} className="p-2 text-slate-300 hover:text-red-500"><Trash2 size={16} /></button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── Yangti Nakpo ── */}
+        {activeTab === 'yangti' && (
+          <div className="space-y-6">
+            <div className="bg-maroon-800 text-white p-8 rounded-3xl mb-8">
+              <h2 className="text-2xl font-black mb-2">Yangti Nakpo Progression</h2>
+              <p className="text-white/70 text-sm">Manage the 10 stages of the Yangti Nakpo sequence. Users will follow this exact path in the app.</p>
+            </div>
+
+            {editingYangtiId && (
+              <div className="bg-white p-8 rounded-3xl border border-slate-200 space-y-6 shadow-sm mb-8">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-black text-lg text-slate-800">Editing Stage {editingYangtiId}</h3>
+                  <button onClick={() => setEditingYangtiId(null)} className="text-slate-400 hover:text-slate-600"><X /></button>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Group (Read-only)</label>
+                  <input className="w-full p-4 bg-slate-100 rounded-2xl border-none font-bold text-slate-500" value={yangtiForm.stage_group} disabled />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Title</label>
+                  <input className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold" value={yangtiForm.title} onChange={e => setYangtiForm({ ...yangtiForm, title: e.target.value })} />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Metric Goal (e.g. 10.000 Lễ)</label>
+                  <input className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold" value={yangtiForm.metric_goal} onChange={e => setYangtiForm({ ...yangtiForm, metric_goal: e.target.value })} />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Detailed Description</label>
+                  <textarea className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold h-32" value={yangtiForm.description || ''} onChange={e => setYangtiForm({ ...yangtiForm, description: e.target.value })} />
+                </div>
+                <div className="flex justify-end gap-3 pt-4">
+                  <button onClick={() => setEditingYangtiId(null)} className="px-6 py-2 font-bold text-slate-400">Cancel</button>
+                  <button onClick={handleSaveYangti} className="bg-maroon-800 text-white px-8 py-2 rounded-2xl font-black text-xs shadow-xl shadow-maroon-800/10">Save Stage</button>
+                </div>
+              </div>
+            )}
+
+            <div className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm">
+              <table className="w-full text-left">
+                <thead className="bg-slate-50"><tr className="text-[9px] font-black uppercase text-slate-400 tracking-widest"><th className="px-8 py-5">Stage</th><th className="px-8 py-5">Group</th><th className="px-8 py-5">Title</th><th className="px-8 py-5">Goal</th><th className="px-8 py-5 text-right">Action</th></tr></thead>
+                <tbody className="divide-y divide-slate-50">
+                  {yangtiStages.map(s => (
+                    <tr key={s.stage_number} className="hover:bg-slate-50/30">
+                      <td className="px-8 py-5">
+                        <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center font-black text-slate-800">{s.stage_number}</div>
+                      </td>
+                      <td className="px-8 py-5 font-black text-[10px] text-slate-400 uppercase">{s.stage_group}</td>
+                      <td className="px-8 py-5 font-bold text-slate-700 text-sm">{s.title}</td>
+                      <td className="px-8 py-5 font-semibold text-slate-500 text-xs">{s.metric_goal}</td>
+                      <td className="px-8 py-5 text-right flex justify-end gap-1">
+                        <button onClick={() => startEditYangti(s)} className="p-2 text-slate-300 hover:text-maroon-800 bg-slate-50 rounded-xl" title="Edit Stage"><Edit3 size={16} /></button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
