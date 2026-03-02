@@ -10,8 +10,9 @@ import { Plus, Trash2, Edit3, Save, X, Newspaper, LogOut, Lock, Bell, Calendar, 
 import { format } from 'date-fns';
 import { twMerge } from 'tailwind-merge';
 import { karmaAdminService, type KarmaPractice, type KarmaSession, type AISkill } from './services/karmaAdminService';
+import { companionAdminService, type AIProfile, type AIMemory, type AISkill as CompanionSkill } from './services/companionAdminService';
 
-type Tab = 'news' | 'notifications' | 'settings' | 'users' | 'dashboard' | 'moderation' | 'micro_learning' | 'realms' | 'survey' | 'yangti' | 'ai_training';
+type Tab = 'news' | 'notifications' | 'settings' | 'users' | 'dashboard' | 'moderation' | 'micro_learning' | 'realms' | 'survey' | 'yangti' | 'ai_training' | 'companion_ai';
 
 type AppConfig = {
   key: string;
@@ -130,6 +131,17 @@ function App() {
   const [selectedSession, setSelectedSession] = useState<KarmaSession | null>(null);
   const [feedbackForm, setFeedbackForm] = useState({ rating: 5, feedback: '', is_trained: false });
 
+  // Companion AI state
+  const [aiProfiles, setAIProfiles] = useState<AIProfile[]>([]);
+  const [selectedAIProfile, setSelectedAIProfile] = useState<AIProfile | null>(null);
+  const [userMemories, setUserMemories] = useState<AIMemory[]>([]);
+  const [companionSkills, setCompanionSkills] = useState<CompanionSkill[]>([]);
+  const [companionSubTab, setCompanionSubTab] = useState<'profiles' | 'skills' | 'memories'>('profiles');
+  const [showCompanionSkillModal, setShowCompanionSkillModal] = useState(false);
+  const [companionSkillForm, setCompanionSkillForm] = useState<Partial<CompanionSkill>>({
+    title: '', description: '', icon_name: 'Sparkles', is_locked: true, required_mpoints: 100, category: 'Spiritual'
+  });
+
   // Auth inputs
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -182,7 +194,8 @@ function App() {
       loadPublicPractices(),
       loadSurveyQuestions(),
       loadYangtiStages(),
-      loadKarmaData()
+      loadKarmaData(),
+      loadCompanionData()
     ]);
     setIsDataLoading(false);
   };
@@ -235,6 +248,32 @@ function App() {
         .limit(100);
       setAllLogs(logs || []);
     } catch (err) { console.error(err); }
+  };
+
+  const loadCompanionData = async () => {
+    try {
+      const [profiles, skills] = await Promise.all([
+        companionAdminService.getAllProfiles(),
+        companionAdminService.getAllSkills()
+      ]);
+      setAIProfiles(profiles);
+      setCompanionSkills(skills);
+    } catch (err) { console.error('Failed to load companion data:', err); }
+  };
+
+  const loadUserMemories = async (userId: string) => {
+    try {
+      const memories = await companionAdminService.getUserMemories(userId);
+      setUserMemories(memories);
+    } catch (err) { console.error('Failed to load user memories:', err); }
+  };
+
+  const handleSaveCompanionSkill = async () => {
+    try {
+      await companionAdminService.upsertSkill(companionSkillForm);
+      setShowCompanionSkillModal(false);
+      loadCompanionData();
+    } catch (err: any) { alert('Failed to save skill: ' + err.message); }
   };
 
   const loadStats = async () => {
@@ -623,6 +662,7 @@ function App() {
     { id: 'survey', label: 'Survey', icon: <HelpCircle size={18} /> },
     { id: 'yangti', label: 'Yangti Nakpo', icon: <Compass size={18} /> },
     { id: 'ai_training', label: 'AI Training', icon: <Sparkles size={18} /> },
+    { id: 'companion_ai', label: 'Companion AI', icon: <MessageSquare size={18} /> },
     { id: 'settings', label: 'Settings', icon: <Settings size={18} /> },
   ];
 
@@ -772,6 +812,9 @@ function App() {
                         <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Unit</label><input className="w-full p-4 bg-slate-50 border-none rounded-2xl" value={practiceForm.target_unit} onChange={e => setPracticeForm({ ...practiceForm, target_unit: e.target.value })} /></div>
                       </div>
                       <div className="flex gap-6 pt-4"><label className="flex items-center gap-3"><input type="checkbox" checked={practiceForm.is_public} onChange={e => setPracticeForm({ ...practiceForm, is_public: e.target.checked })} /> <span className="text-xs font-bold text-slate-600">Public</span></label><label className="flex items-center gap-3"><input type="checkbox" checked={practiceForm.is_active} onChange={e => setPracticeForm({ ...practiceForm, is_active: e.target.checked })} /> <span className="text-xs font-bold text-slate-600">Active</span></label></div>
+                      <button onClick={handleSavePractice} className="w-full bg-maroon-800 text-white p-4 rounded-xl font-black uppercase shadow-lg shadow-maroon-800/20 mt-4 flex items-center justify-center gap-2">
+                        <Save size={18} /> {editingPracticeId ? 'Update Practice' : 'Save Practice Entry'}
+                      </button>
                     </div>
 
                   </div>
@@ -1157,6 +1200,192 @@ function App() {
                     </div>
                   );
                 })()}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Companion AI Tab ── */}
+        {activeTab === 'companion_ai' && (
+          <div className="space-y-8 animate-in fade-in">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-8 rounded-3xl border border-slate-200 shadow-sm gap-6">
+              <div className="flex items-center gap-6">
+                <div className="p-4 bg-maroon-50 text-maroon-800 rounded-3xl"><Compass size={32} /></div>
+                <div>
+                  <h2 className="text-2xl font-black text-slate-800">Companion AI Management</h2>
+                  <p className="text-slate-400 text-sm font-bold">Monitor and train your users' spiritual companions.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-4 p-1 bg-slate-200/50 rounded-2xl w-fit">
+              {(['profiles', 'skills', 'memories'] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setCompanionSubTab(t)}
+                  className={twMerge(
+                    "px-8 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
+                    companionSubTab === t ? "bg-white text-maroon-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                  )}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+
+            {companionSubTab === 'profiles' && (
+              <div className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50 border-b border-slate-100">
+                    <tr className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                      <th className="px-8 py-5">User / Companion</th>
+                      <th className="px-8 py-5">State</th>
+                      <th className="px-8 py-5">Last Activity</th>
+                      <th className="px-8 py-5 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {aiProfiles.map(p => (
+                      <tr key={p.id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-8 py-5">
+                          <div>
+                            <p className="font-extrabold text-slate-800">{p.profiles?.display_name || 'Anonymous'}</p>
+                            <p className="text-[10px] text-maroon-800 font-bold uppercase mt-1">AI Name: {p.companion_name}</p>
+                          </div>
+                        </td>
+                        <td className="px-8 py-5">
+                          <span className="text-[10px] font-black uppercase px-2 py-1 bg-maroon-50 text-maroon-800 rounded-md">{p.emotional_state}</span>
+                        </td>
+                        <td className="px-8 py-5 text-xs text-slate-400">
+                          {p.last_interaction_at ? format(new Date(p.last_interaction_at), 'MMM d, HH:mm') : 'None'}
+                        </td>
+                        <td className="px-8 py-5 text-right">
+                          <button
+                            onClick={() => {
+                              setSelectedAIProfile(p);
+                              loadUserMemories(p.user_id);
+                              setCompanionSubTab('memories');
+                            }}
+                            className="bg-slate-900 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-tighter"
+                          >
+                            Inspection
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {companionSubTab === 'memories' && (
+              <div className="space-y-6">
+                <div className="bg-slate-900 text-white p-6 rounded-3xl flex justify-between items-center">
+                  <div>
+                    <h3 className="font-black text-lg">Memory Lab: {selectedAIProfile?.companion_name || 'Select a user'}</h3>
+                    <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">User: {selectedAIProfile?.profiles?.display_name}</p>
+                  </div>
+                  <button onClick={() => setCompanionSubTab('profiles')} className="text-xs font-black uppercase bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl">Back to List</button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {userMemories.map(m => (
+                    <div key={m.id} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm relative group">
+                      <div className="flex justify-between items-start mb-2">
+                        <span className={twMerge(
+                          "text-[9px] font-black uppercase px-2 py-0.5 rounded",
+                          m.memory_type === 'core' ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-800"
+                        )}>{m.memory_type} Memory</span>
+                        <button
+                          onClick={async () => {
+                            if (confirm('Erase this specific memory?')) {
+                              await companionAdminService.deleteMemory(m.id);
+                              loadUserMemories(m.user_id);
+                            }
+                          }}
+                          className="p-1.5 text-slate-300 hover:text-red-500 transition-colors"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                      <p className="text-sm font-bold text-slate-700 leading-relaxed mb-4">"{m.content}"</p>
+                      <div className="flex justify-between items-center mt-auto">
+                        <span className="text-[10px] text-slate-300 font-bold">{format(new Date(m.created_at), 'MMM d, yyyy')}</span>
+                        <div className="flex gap-1">
+                          {Array.from({ length: m.importance }).map((_, i) => (
+                            <div key={i} className="w-1 h-1 rounded-full bg-amber-400" />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {userMemories.length === 0 && (
+                    <div className="md:col-span-2 py-20 text-center border-2 border-dashed border-slate-100 rounded-3xl">
+                      <p className="text-slate-300 font-black uppercase tracking-widest text-xs">No core memories established yet</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {companionSubTab === 'skills' && (
+              <div className="space-y-6">
+                <button
+                  onClick={() => {
+                    setCompanionSkillForm({ title: '', description: '', icon_name: 'Sparkles', is_locked: true, required_mpoints: 100, category: 'Spiritual' });
+                    setShowCompanionSkillModal(true);
+                  }}
+                  className="bg-maroon-800 text-white px-8 py-3 rounded-2xl font-black text-sm flex items-center gap-2 shadow-xl shadow-maroon-800/20"
+                >
+                  <Plus size={18} /> Define Global AI Skill
+                </button>
+
+                {showCompanionSkillModal && (
+                  <div className="bg-white p-10 rounded-3xl border-2 border-maroon-900 shadow-2xl space-y-6 max-w-2xl mx-auto">
+                    <div className="flex justify-between items-center"><h3 className="font-black text-xl">Skill Definition</h3><button onClick={() => setShowCompanionSkillModal(false)}><X /></button></div>
+                    <div className="grid gap-4">
+                      <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Skill ID / Unique Key</label><input className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold" value={companionSkillForm.id} onChange={e => setCompanionSkillForm({ ...companionSkillForm, id: e.target.value })} placeholder="skill_death_awareness" /></div>
+                      <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Title</label><input className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold" value={companionSkillForm.title} onChange={e => setCompanionSkillForm({ ...companionSkillForm, title: e.target.value })} /></div>
+                      <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Description</label><textarea className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold h-24" value={companionSkillForm.description} onChange={e => setCompanionSkillForm({ ...companionSkillForm, description: e.target.value })} /></div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Required MPoints</label><input type="number" className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold" value={companionSkillForm.required_mpoints} onChange={e => setCompanionSkillForm({ ...companionSkillForm, required_mpoints: parseInt(e.target.value) })} /></div>
+                        <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Icon (Lucide Name)</label><input className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold" value={companionSkillForm.icon_name} onChange={e => setCompanionSkillForm({ ...companionSkillForm, icon_name: e.target.value })} /></div>
+                      </div>
+                      <div className="flex gap-4 items-center">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={companionSkillForm.is_locked} onChange={e => setCompanionSkillForm({ ...companionSkillForm, is_locked: e.target.checked })} />
+                          <span className="text-xs font-black uppercase text-slate-600">Locked by Default</span>
+                        </label>
+                      </div>
+                    </div>
+                    <button onClick={handleSaveCompanionSkill} className="w-full bg-maroon-800 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl">Activate in Library</button>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {companionSkills.map(s => (
+                    <div key={s.id} className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm relative group overflow-hidden">
+                      <div className="flex justify-between items-start mb-6">
+                        <div className="w-12 h-12 bg-slate-50 text-slate-400 rounded-2xl flex items-center justify-center border border-slate-100">
+                          <Settings size={24} />
+                        </div>
+                        <div className="flex gap-1">
+                          <button onClick={() => { setCompanionSkillForm(s); setShowCompanionSkillModal(true); }} className="p-2 text-slate-300 hover:text-maroon-800"><Edit3 size={18} /></button>
+                          <button onClick={async () => { if (confirm('Delete skill?')) { await companionAdminService.deleteSkill(s.id); loadCompanionData(); } }} className="p-2 text-slate-300 hover:text-red-500"><Trash2 size={18} /></button>
+                        </div>
+                      </div>
+                      <h4 className="text-lg font-black text-slate-800 mb-2">{s.title}</h4>
+                      <p className="text-xs font-bold text-slate-400 leading-relaxed mb-6 line-clamp-3">{s.description}</p>
+                      <div className="flex justify-between items-center pt-6 border-t border-slate-50 mt-auto">
+                        <div className="flex flex-col">
+                          <span className="text-[9px] font-black text-slate-300 uppercase tracking-tighter">Required Points</span>
+                          <span className="text-sm font-black text-maroon-800">{s.required_mpoints.toLocaleString()} MP</span>
+                        </div>
+                        {s.is_locked ? <div className="p-2 bg-slate-50 text-slate-400 rounded-lg"><Lock size={14} /></div> : <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg"><ShieldCheck size={14} /></div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
