@@ -15,6 +15,30 @@ export interface Realm {
     dice_6: number;
 }
 
+export interface Treasure {
+    id: string;
+    realm_id: number;
+    name: string;
+    description: string;
+    image_url: string;
+    total_quantity: number;
+    remaining_quantity: number;
+    drop_rate_percent: number;
+    is_active: boolean;
+    created_at: string;
+}
+
+export interface TreasureWinner {
+    id: string;
+    treasure_id: string;
+    user_id: string;
+    claimed_at: string;
+    profiles?: {
+        full_name: string;
+        email: string;
+    };
+}
+
 export const rebirthAdminService = {
     async getAllRealms(): Promise<Realm[]> {
         const { data, error } = await supabase
@@ -62,5 +86,53 @@ export const rebirthAdminService = {
             console.error('[RebirthAdminService] updateRealmPractices failed:', err);
             throw err;
         }
+    },
+
+    // --- Treasure Management ---
+
+    async getAllTreasures(): Promise<Treasure[]> {
+        const { data, error } = await supabase
+            .from('game_treasures')
+            .select('*')
+            .order('created_at', { ascending: false });
+        if (error) throw error;
+        return data as Treasure[];
+    },
+
+    async createTreasure(treasure: Omit<Treasure, 'id' | 'created_at'>): Promise<void> {
+        const { error } = await supabase
+            .from('game_treasures')
+            .insert([treasure]);
+        if (error) throw error;
+    },
+
+    async updateTreasure(id: string, updates: Partial<Treasure>): Promise<void> {
+        const { error } = await supabase
+            .from('game_treasures')
+            .update(updates)
+            .eq('id', id);
+        if (error) throw error;
+    },
+
+    async deleteTreasure(id: string): Promise<void> {
+        const { error } = await supabase
+            .from('game_treasures')
+            .delete()
+            .eq('id', id);
+        if (error) throw error;
+    },
+
+    async getTreasureWinners(treasureId: string): Promise<TreasureWinner[]> {
+        const { data, error } = await supabase
+            .from('game_treasure_winners')
+            .select(`
+                *,
+                profiles:user_id(full_name, email)
+            `)
+            .eq('treasure_id', treasureId)
+            .order('claimed_at', { ascending: false });
+
+        if (error) throw error;
+        return data as any;
     }
 };

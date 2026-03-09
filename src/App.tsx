@@ -3,16 +3,16 @@ import { supabase } from './lib/supabase';
 import { newsAdminService, type NewsArticle } from './services/newsAdminService';
 import { notificationAdminService, type AppNotification } from './services/notificationAdminService';
 import { microLearningAdminService, type MicroLearningPost } from './services/microLearningAdminService';
-import { rebirthAdminService, type Realm } from './services/rebirthAdminService';
+import { rebirthAdminService, type Realm, type Treasure, type TreasureWinner } from './services/rebirthAdminService';
 import { surveyAdminService, type SurveyQuestion } from './services/surveyAdminService';
 import { yangtiAdminService, type YangtiStage } from './services/yangtiAdminService';
-import { Plus, Trash2, Edit3, Save, X, Newspaper, LogOut, Lock, Bell, Calendar, Settings, Users, LayoutDashboard, ShieldCheck, ShieldAlert, BookOpen, Dices, Check, HelpCircle, Compass, Sparkles, MessageSquare, Star, Info } from 'lucide-react';
+import { Plus, Trash2, Edit3, Save, X, Newspaper, LogOut, Lock, Bell, Calendar, Settings, Users, LayoutDashboard, ShieldCheck, ShieldAlert, BookOpen, Dices, Check, HelpCircle, Compass, Sparkles, MessageSquare, Star, Info, Gift } from 'lucide-react';
 import { format } from 'date-fns';
 import { twMerge } from 'tailwind-merge';
 import { karmaAdminService, type KarmaPractice, type KarmaSession, type AISkill } from './services/karmaAdminService';
 import { companionAdminService, type AIProfile, type AIMemory, type AISkill as CompanionSkill } from './services/companionAdminService';
 
-type Tab = 'news' | 'notifications' | 'settings' | 'users' | 'dashboard' | 'moderation' | 'micro_learning' | 'realms' | 'survey' | 'yangti' | 'ai_training' | 'companion_ai';
+type Tab = 'news' | 'notifications' | 'settings' | 'users' | 'dashboard' | 'moderation' | 'micro_learning' | 'realms' | 'survey' | 'yangti' | 'ai_training' | 'companion_ai' | 'treasures';
 
 type AppConfig = {
   key: string;
@@ -142,6 +142,16 @@ function App() {
     title: '', description: '', icon_name: 'Sparkles', is_locked: true, required_mpoints: 100, category: 'Spiritual'
   });
 
+  // Treasures state
+  const [treasures, setTreasures] = useState<Treasure[]>([]);
+  const [editingTreasureId, setEditingTreasureId] = useState<string | null>(null);
+  const [showTreasureForm, setShowTreasureForm] = useState(false);
+  const [treasureForm, setTreasureForm] = useState<Partial<Treasure>>({
+    name: '', description: '', image_url: '', total_quantity: 1, remaining_quantity: 1, drop_rate_percent: 10, is_active: true, realm_id: 1
+  });
+  const [treasureWinners, setTreasureWinners] = useState<Record<string, TreasureWinner[]>>({});
+
+
   // Auth inputs
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -180,6 +190,13 @@ function App() {
     }
   };
 
+  const loadTreasures = async () => {
+    try {
+      const data = await rebirthAdminService.getAllTreasures();
+      setTreasures(data);
+    } catch (e) { console.warn('Failed to load treasures', e); }
+  };
+
   const loadAll = async () => {
     setIsDataLoading(true);
     await Promise.all([
@@ -195,7 +212,8 @@ function App() {
       loadSurveyQuestions(),
       loadYangtiStages(),
       loadKarmaData(),
-      loadCompanionData()
+      loadCompanionData(),
+      loadTreasures()
     ]);
     setIsDataLoading(false);
   };
@@ -607,6 +625,45 @@ function App() {
     }
   };
 
+  const handleSaveTreasure = async () => {
+    try {
+      if (editingTreasureId) await rebirthAdminService.updateTreasure(editingTreasureId, treasureForm);
+      else await rebirthAdminService.createTreasure(treasureForm as any);
+      setShowTreasureForm(false);
+      setEditingTreasureId(null);
+      setTreasureForm({ name: '', description: '', image_url: '', total_quantity: 1, remaining_quantity: 1, drop_rate_percent: 10, is_active: true, realm_id: 1 });
+      loadTreasures();
+    } catch { alert('Failed to save treasure'); }
+  };
+
+  const handleDeleteTreasure = async (id: string) => {
+    if (!confirm('Delete this treasure?')) return;
+    try { await rebirthAdminService.deleteTreasure(id); loadTreasures(); } catch { alert('Failed to delete'); }
+  };
+
+  const startEditTreasure = (t: Treasure) => {
+    setEditingTreasureId(t.id);
+    setTreasureForm(t);
+    setShowTreasureForm(true);
+  };
+
+  const toggleShowWinners = async (treasureId: string) => {
+    if (treasureWinners[treasureId]) {
+      // Hide if already loaded
+      const newWinners = { ...treasureWinners };
+      delete newWinners[treasureId];
+      setTreasureWinners(newWinners);
+    } else {
+      try {
+        const winners = await rebirthAdminService.getTreasureWinners(treasureId);
+        setTreasureWinners(prev => ({ ...prev, [treasureId]: winners }));
+      } catch (e) {
+        console.error("Failed to fetch winners", e);
+      }
+    }
+  };
+
+
   // ── Render ──
   if (loading) {
     return (
@@ -657,6 +714,7 @@ function App() {
     { id: 'news', label: 'News', icon: <Newspaper size={18} /> },
     { id: 'micro_learning', label: 'Micro Learning', icon: <BookOpen size={18} /> },
     { id: 'realms', label: 'Realms', icon: <Dices size={18} /> },
+    { id: 'treasures', label: 'Treasures', icon: <Gift size={18} /> },
     { id: 'notifications', label: 'Notifs', icon: <Bell size={18} /> },
     { id: 'moderation', label: 'Moderation', icon: <ShieldCheck size={18} /> },
     { id: 'survey', label: 'Survey', icon: <HelpCircle size={18} /> },
@@ -1460,7 +1518,123 @@ function App() {
           </div>
         )}
 
+        {/* ── Treasures ── */}
+        {activeTab === 'treasures' && (
+          <div className="space-y-6">
+            <div className="bg-amber-50 text-amber-800 p-8 rounded-3xl mb-8 flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-black mb-2 flex items-center gap-2"><Gift size={24} /> Treasure Management</h2>
+                <p className="text-amber-800/70 text-sm">Place physical gifts randomly in specific realms for players to discover via MPoints.</p>
+              </div>
+              <button
+                onClick={() => { setEditingTreasureId(null); setTreasureForm({ name: '', description: '', image_url: '', total_quantity: 1, remaining_quantity: 1, drop_rate_percent: 10, is_active: true, realm_id: realms[0]?.id || 1 }); setShowTreasureForm(true); }}
+                className="bg-amber-600 text-white px-6 py-3 rounded-2xl font-black text-sm shadow-xl flex items-center gap-2"
+              >
+                <Plus size={18} /> Create Treasure
+              </button>
+            </div>
+
+            {showTreasureForm && (
+              <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm mb-8 space-y-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-black text-lg text-slate-800">{editingTreasureId ? 'Edit Treasure' : 'New Treasure'}</h3>
+                  <button onClick={() => setShowTreasureForm(false)} className="text-slate-400 hover:text-slate-600"><X /></button>
+                </div>
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Name</label><input className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold" value={treasureForm.name} onChange={e => setTreasureForm({ ...treasureForm, name: e.target.value })} /></div>
+                  <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Image URL</label><input className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold text-xs" value={treasureForm.image_url} onChange={e => setTreasureForm({ ...treasureForm, image_url: e.target.value })} placeholder="https://..." /></div>
+                  <div className="md:col-span-2"><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Description</label><textarea className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold text-sm" value={treasureForm.description} onChange={e => setTreasureForm({ ...treasureForm, description: e.target.value })} /></div>
+
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Target Realm</label>
+                    <select className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold" value={treasureForm.realm_id} onChange={e => setTreasureForm({ ...treasureForm, realm_id: parseInt(e.target.value) })}>
+                      {realms.map(r => <option key={r.id} value={r.id}>[{r.id}] {r.name}</option>)}
+                    </select>
+                  </div>
+                  <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Drop Rate (%)</label><input type="number" className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold" value={treasureForm.drop_rate_percent} onChange={e => setTreasureForm({ ...treasureForm, drop_rate_percent: parseInt(e.target.value) })} /></div>
+
+                  <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Total Quantity</label><input type="number" className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold" value={treasureForm.total_quantity} onChange={e => setTreasureForm({ ...treasureForm, total_quantity: parseInt(e.target.value) })} /></div>
+                  <div><label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Remaining Quantity</label><input type="number" className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold text-amber-600" value={treasureForm.remaining_quantity} onChange={e => setTreasureForm({ ...treasureForm, remaining_quantity: parseInt(e.target.value) })} /></div>
+
+                  <div className="md:col-span-2">
+                    <label className="flex items-center gap-3">
+                      <input type="checkbox" checked={treasureForm.is_active} onChange={e => setTreasureForm({ ...treasureForm, is_active: e.target.checked })} />
+                      <span className="text-sm font-bold text-slate-700">Active (Visible on Map)</span>
+                    </label>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-3 pt-4">
+                  <button onClick={() => setShowTreasureForm(false)} className="px-6 py-2 font-bold text-slate-400">Cancel</button>
+                  <button onClick={handleSaveTreasure} className="bg-amber-600 text-white px-8 py-3 rounded-2xl font-black text-xs shadow-xl">Save Treasure</button>
+                </div>
+              </div>
+            )}
+
+            <div className="grid gap-6">
+              {treasures.map(t => (
+                <div key={t.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                  <div className="flex flex-col md:flex-row gap-6">
+                    {t.image_url ? (
+                      <img src={t.image_url} alt={t.name} className="w-24 h-24 rounded-2xl object-cover bg-slate-100" />
+                    ) : (
+                      <div className="w-24 h-24 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600"><Gift size={32} /></div>
+                    )}
+                    <div className="flex-1">
+                      <div className="flex justify-between">
+                        <div>
+                          <h3 className="text-xl font-black text-slate-800">{t.name}</h3>
+                          <p className="text-xs font-bold text-slate-400 mt-1 uppercase">Realm: {realms.find(r => r.id === t.realm_id)?.name || t.realm_id} • Drop: {t.drop_rate_percent}%</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => startEditTreasure(t)} className="p-2 text-slate-400 hover:text-amber-600"><Edit3 size={18} /></button>
+                          <button onClick={() => handleDeleteTreasure(t.id)} className="p-2 text-slate-400 hover:text-red-500"><Trash2 size={18} /></button>
+                        </div>
+                      </div>
+                      <p className="text-sm text-slate-500 mt-3 line-clamp-2">{t.description}</p>
+
+                      <div className="mt-4 flex items-center gap-4">
+                        <div className="bg-slate-50 px-4 py-2 rounded-xl text-sm font-bold text-slate-600">
+                          Remaining: <span className={t.remaining_quantity === 0 ? "text-red-500" : "text-emerald-600"}>{t.remaining_quantity}</span> / {t.total_quantity}
+                        </div>
+                        {!t.is_active && <span className="bg-red-100 text-red-700 text-[10px] font-black uppercase px-2 py-1 rounded">Inactive</span>}
+
+                        <button onClick={() => toggleShowWinners(t.id)} className="text-amber-600 text-sm font-bold underline ml-auto">
+                          {treasureWinners[t.id] ? 'Hide Winners' : 'View Winners'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {treasureWinners[t.id] && (
+                    <div className="mt-6 pt-6 border-t border-slate-100">
+                      <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-4">Winners ({treasureWinners[t.id].length})</h4>
+                      {treasureWinners[t.id].length === 0 ? (
+                        <p className="text-sm text-slate-500 italic">No one has found this treasure yet.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {treasureWinners[t.id].map(w => (
+                            <div key={w.id} className="flex justify-between p-3 bg-slate-50 rounded-xl">
+                              <div>
+                                <p className="font-bold text-slate-800 text-sm">{w.profiles?.full_name || 'Unknown'}</p>
+                                <p className="text-xs text-slate-500">{w.profiles?.email || 'No email'}</p>
+                              </div>
+                              <div className="text-xs text-slate-400 font-bold">
+                                {format(new Date(w.claimed_at), 'MMM d, yyyy HH:mm')}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* ── Settings ── */}
+
         {activeTab === 'settings' && (
           <div className="max-w-3xl space-y-10">
             {Array.from(new Set(configs.map(c => c.category))).map(cat => (
