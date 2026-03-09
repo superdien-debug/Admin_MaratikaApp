@@ -843,20 +843,89 @@ function App() {
 
         {/* ── Realms ── */}
         {activeTab === 'realms' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {realms.map(r => (
-              <div key={r.id} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 relative group">
-                <div className="flex justify-between mb-4">
-                  <div className="w-12 h-12 rounded-2xl bg-maroon-50 text-maroon-800 flex items-center justify-center font-black">#{r.id}</div>
-                  <button onClick={() => startEditRealm(r)} className="p-2 text-slate-300 hover:text-maroon-800"><Edit3 size={18} /></button>
+          <div className="space-y-8 animate-in fade-in">
+            {editingRealmId && (
+              <div className="bg-white p-8 rounded-3xl border-2 border-maroon-900 shadow-2xl space-y-6">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-black text-xl text-slate-800">Edit Realm Config #{editingRealmId}</h3>
+                  <button onClick={() => { setEditingRealmId(null); setRealmForm({}); setSelectedPractices([]); }} className="text-slate-400 hover:text-slate-600"><X /></button>
                 </div>
-                <h3 className="text-lg font-black text-slate-800 mb-2">{r.name}</h3>
-                <p className="text-xs text-slate-500 line-clamp-2 mb-6">{r.short_desc}</p>
-                <div className="grid grid-cols-6 gap-1 bg-slate-50 p-2 rounded-xl">
-                  {[1, 2, 3, 4, 5, 6].map(d => <div key={d} className="flex flex-col items-center"><span className="text-[8px] font-black text-slate-300">{d}</span><span className="text-[10px] font-bold text-slate-700">{(r as any)[`dice_${d}`]}</span></div>)}
+
+                <div className="grid md:grid-cols-2 gap-8">
+                  <div className="space-y-5">
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Realm Name</label>
+                      <input className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold focus:ring-2 focus:ring-maroon-800/10" value={realmForm.name || ''} onChange={e => setRealmForm({ ...realmForm, name: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Short Vision (Subtitle)</label>
+                      <input className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold" value={realmForm.short_desc || ''} onChange={e => setRealmForm({ ...realmForm, short_desc: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Life Span (Days)</label>
+                      <input type="number" className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold" value={realmForm.life_days || 0} onChange={e => setRealmForm({ ...realmForm, life_days: parseInt(e.target.value) })} />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-slate-400 mb-3 block">Dice Probabilities (Target IDs)</label>
+                      <div className="grid grid-cols-6 gap-2">
+                        {[1, 2, 3, 4, 5, 6].map(d => (
+                          <div key={d}>
+                            <label className="text-[8px] font-black text-slate-300 mb-1 block text-center">Face {d}</label>
+                            <input type="number" className="w-full p-2 bg-slate-50 rounded-xl border-none font-black text-center text-maroon-800" value={(realmForm as any)[`dice_${d}`] || 0} onChange={e => setRealmForm({ ...realmForm, [`dice_${d}`]: parseInt(e.target.value) })} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-5">
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Mandatory Practices (Atomic List)</label>
+                      <div className="bg-slate-50 rounded-2xl p-4 max-h-[220px] overflow-y-auto space-y-1 border border-slate-100">
+                        {publicPractices.map(p => (
+                          <button key={p.id} onClick={() => togglePractice(p.id)} className={twMerge(
+                            "w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left",
+                            selectedPractices.includes(p.id) ? "bg-maroon-800 text-white shadow-lg shadow-maroon-800/10" : "hover:bg-white text-slate-600"
+                          )}>
+                            <div className={twMerge("w-4 h-4 rounded-md border-2 flex items-center justify-center", selectedPractices.includes(p.id) ? "border-white" : "border-slate-200")}>
+                              {selectedPractices.includes(p.id) && <Check size={10} strokeWidth={4} />}
+                            </div>
+                            <span className="text-xs font-bold leading-none">{p.title}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Full Realm Description (Markdown)</label>
+                      <textarea className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold h-32 focus:ring-2 focus:ring-maroon-800/10" value={realmForm.description || ''} onChange={e => setRealmForm({ ...realmForm, description: e.target.value })} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-6 border-t border-slate-50">
+                  <button onClick={() => { setEditingRealmId(null); setRealmForm({}); setSelectedPractices([]); }} className="px-6 py-2 font-bold text-slate-400">Cancel</button>
+                  <button onClick={handleSaveRealm} className="bg-slate-900 text-white px-10 py-3 rounded-2xl font-black text-sm shadow-xl flex items-center gap-2">
+                    <Save size={18} /> Update Realm Database
+                  </button>
                 </div>
               </div>
-            ))}
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {realms.map(r => (
+                <div key={r.id} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 relative group hover:shadow-md transition-all">
+                  <div className="flex justify-between mb-4">
+                    <div className="w-12 h-12 rounded-2xl bg-maroon-50 text-maroon-800 flex items-center justify-center font-black">#{r.id}</div>
+                    <button onClick={() => startEditRealm(r)} className="p-2 text-slate-300 hover:text-maroon-800 transition-colors"><Edit3 size={18} /></button>
+                  </div>
+                  <h3 className="text-lg font-black text-slate-800 mb-2">{r.name}</h3>
+                  <p className="text-xs text-slate-500 line-clamp-2 mb-6 h-8">{r.short_desc}</p>
+                  <div className="grid grid-cols-6 gap-1 bg-slate-50 p-2 rounded-xl">
+                    {[1, 2, 3, 4, 5, 6].map(d => <div key={d} className="flex flex-col items-center"><span className="text-[8px] font-black text-slate-300">{d}</span><span className="text-[10px] font-bold text-slate-700">{(r as any)[`dice_${d}`]}</span></div>)}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
