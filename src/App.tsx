@@ -916,8 +916,14 @@ function App() {
                       <input className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold focus:ring-2 focus:ring-maroon-800/10" value={realmForm.name || ''} onChange={e => setRealmForm({ ...realmForm, name: e.target.value })} />
                     </div>
                     <div>
-                      <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Short Vision (Subtitle)</label>
-                      <input className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold" value={realmForm.short_desc || ''} onChange={e => setRealmForm({ ...realmForm, short_desc: e.target.value })} />
+                      <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Short Vision / Subtitle (HTML)</label>
+                      <textarea className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold h-20 focus:ring-2 focus:ring-maroon-800/10" value={realmForm.short_desc || ''} onChange={e => setRealmForm({ ...realmForm, short_desc: e.target.value })} />
+                      {realmForm.short_desc && (
+                        <div className="mt-2 p-3 bg-white rounded-xl border border-slate-100">
+                          <label className="text-[8px] font-black uppercase text-emerald-500 mb-1 block">Preview</label>
+                          <div className="text-sm text-slate-700" dangerouslySetInnerHTML={{ __html: realmForm.short_desc }} />
+                        </div>
+                      )}
                     </div>
                     <div>
                       <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Life Span (Days)</label>
@@ -954,8 +960,14 @@ function App() {
                       </div>
                     </div>
                     <div>
-                      <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Full Realm Description (Markdown)</label>
+                      <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Full Realm Description (HTML)</label>
                       <textarea className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold h-32 focus:ring-2 focus:ring-maroon-800/10" value={realmForm.description || ''} onChange={e => setRealmForm({ ...realmForm, description: e.target.value })} />
+                      {realmForm.description && (
+                        <div className="mt-2 p-3 bg-white rounded-xl border border-slate-100 max-h-48 overflow-y-auto">
+                          <label className="text-[8px] font-black uppercase text-emerald-500 mb-1 block">Preview</label>
+                          <div className="text-sm text-slate-700 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: realmForm.description }} />
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

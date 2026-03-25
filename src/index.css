@@ -1,97 +1,69 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
 
-:root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-}
-
-body {
-  margin: 0;
-  color: #1e293b;
+@theme {
+  --color-maroon-50: #fff1f2;
+  --color-maroon-100: #ffe4e6;
+  --color-maroon-200: #fecdd3;
+  --color-maroon-800: #5e0b0b;
+  --color-maroon-900: #3d0808;
+  --font-family-sans: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
 @layer base {
-  .bg-maroon-800 {
-    background-color: #5e0b0b;
+  *, *::before, *::after {
+    box-sizing: border-box;
   }
 
-  .bg-maroon-900 {
-    background-color: #3d0808;
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    min-height: 100vh;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: #f8fafc;
+    color: #1e293b;
   }
 
-  .text-maroon-800 {
-    color: #5e0b0b;
+  #root {
+    width: 100%;
+    min-height: 100vh;
   }
 
-  .bg-maroon-50 {
-    background-color: #fff1f2;
-  }
-
-  .hover\:bg-maroon-50:hover {
-    background-color: #fff1f2;
-  }
-
-  .shadow-maroon-800\/20 {
-    shadow-color: rgba(94, 11, 11, 0.2);
-  }
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-
-a:hover {
-  color: #535bf2;
-}
-
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-
-button:hover {
-  border-color: #646cff;
-}
-
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-
-  a:hover {
-    color: #747bff;
-  }
-
+  /* Reset Vite default button styles that override Tailwind */
   button {
-    background-color: #f9f9f9;
+    border-radius: 0;
+    border: none;
+    padding: 0;
+    font-size: inherit;
+    font-weight: inherit;
+    font-family: inherit;
+    background-color: transparent;
+    cursor: pointer;
+  }
+
+  button:hover {
+    border-color: transparent;
+  }
+
+  button:focus,
+  button:focus-visible {
+    outline: none;
+  }
+
+  /* Reset link styles */
+  a {
+    color: inherit;
+    text-decoration: none;
+    font-weight: inherit;
+  }
+}
+
+@utility scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
   }
 }
